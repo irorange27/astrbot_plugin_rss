@@ -115,8 +115,12 @@
               <label class="switch"><input type="checkbox" id="setAiSummary" /><span class="track"></span></label>
             </div>
             <div class="field grow">
-              <label for="setAiPrompt">摘要提示词</label>
-              <textarea id="setAiPrompt" rows="4" placeholder="留空使用默认提示词"></textarea>
+              <div class="label-row">
+                <label for="setAiPrompt">摘要提示词</label>
+                <button class="btn small ghost" type="button" id="promptReset">恢复默认</button>
+              </div>
+              <textarea id="setAiPrompt" rows="4" placeholder=""></textarea>
+              <span class="field-hint">留空使用默认提示词（见输入框内灰字说明）</span>
             </div>
           </div>
 
@@ -128,7 +132,8 @@
             <div class="grid-3">
               <div class="field">
                 <label for="setMaxItems">每次最多取条目数</label>
-                <input id="setMaxItems" type="number" min="1" max="50" />
+                <input id="setMaxItems" type="number" min="-1" max="50" />
+                <span class="field-hint">-1 表示不限制</span>
               </div>
               <div class="field">
                 <label for="setTitleMax">标题最大长度</label>
@@ -142,10 +147,10 @@
             <div class="switch-cols">
               <div class="switch-row"><span class="switch-label">文字转图片发送</span><label class="switch"><input type="checkbox" id="setT2i" /><span class="track"></span></label></div>
               <div class="switch-row"><span class="switch-label">隐藏链接（防风控）</span><label class="switch"><input type="checkbox" id="setHideUrl" /><span class="track"></span></label></div>
-              <div class="switch-row"><span class="switch-label">QQ 合并为转发消息</span><label class="switch"><input type="checkbox" id="setCompose" /><span class="track"></span></label></div>
+              <div class="switch-row"><span class="switch-label">QQ 合并为转发消息（仅 QQ）</span><label class="switch"><input type="checkbox" id="setCompose" /><span class="track"></span></label></div>
               <div class="switch-row"><span class="switch-label">携带条目配图</span><label class="switch"><input type="checkbox" id="setReadPic" /><span class="track"></span></label></div>
               <div class="switch-row"><span class="switch-label">配图圆角修饰</span><label class="switch"><input type="checkbox" id="setAdjustPic" /><span class="track"></span></label></div>
-              <div class="field narrow"><label for="setMaxPic">配图最多张数</label><input id="setMaxPic" type="number" min="-1" max="20" /></div>
+              <div class="field narrow"><label for="setMaxPic">配图最多张数</label><input id="setMaxPic" type="number" min="-1" max="20" /><span class="field-hint">-1 表示不限制</span></div>
             </div>
           </div>
 

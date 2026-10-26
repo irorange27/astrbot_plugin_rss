@@ -81,6 +81,7 @@ class RssPlugin(Star):
         self.context.register_web_api(f"{base}/endpoint/delete", self._api_endpoint_delete, ["POST"], "Delete an RSSHub endpoint")
         self.context.register_web_api(f"{base}/settings", self._api_settings, ["GET"], "Read panel-related plugin settings")
         self.context.register_web_api(f"{base}/settings/save", self._api_settings_save, ["POST"], "Save panel-related plugin settings")
+        self.context.register_web_api(f"{base}/feed/rename", self._api_feed_rename, ["POST"], "Rename a feed title")
 
     def parse_cron_expr(self, cron_expr: str):
         fields = cron_expr.split(" ")
@@ -1020,6 +1021,7 @@ class RssPlugin(Star):
         return json_response(
             {
                 **{k: self.config.get(k) for k in self._PANEL_SETTING_KEYS},
+                "ai_summary_prompt_default": DEFAULT_DIGEST_PROMPT,
                 "pic_config": {
                     "is_read_pic": pic.get("is_read_pic"),
                     "is_adjust_pic": pic.get("is_adjust_pic"),
@@ -1059,3 +1061,16 @@ class RssPlugin(Star):
         self.is_hide_url = self.config.get("is_hide_url")
         self.is_compose = self.config.get("compose")
         return json_response({"saved": True})
+
+    async def _api_feed_rename(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        title = (payload.get("title") or "").strip()
+        entry = self.data_handler.data.get(url)
+        if not entry:
+            return error_response("订阅源不存在", status_code=404)
+        if not title:
+            return error_response("标题不能为空", status_code=400)
+        entry["info"]["title"] = title
+        self.data_handler.save_data()
+        return json_response({"url": url, "title": title})

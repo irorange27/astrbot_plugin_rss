@@ -12,6 +12,7 @@ const state = {
   addOpen: false,
   verified: null, // {url, title} from 验证
   editingKey: null,
+  feedEditKey: null,
   confirmKey: null,
   previewKey: null,
   preview: { items: [], loading: false, error: null },
@@ -270,7 +271,7 @@ function renderTable() {
   for (const r of rows) {
     const key = `${r.url}|${r.session}`;
     tbody.appendChild(dataRow(r, key));
-    if (state.previewKey === key) tbody.appendChild(previewRow());
+    if (state.previewKey === key) tbody.appendChild(previewRow(r));
   }
   table.appendChild(tbody);
   wrap.replaceChildren(table);
@@ -300,17 +301,54 @@ function dataRow(r, key) {
     ),
   );
 
-  tr.appendChild(
-    el("td", { class: "col-feed" },
+  const feedTd = el("td", { class: "col-feed" });
+  if (state.feedEditKey === key) {
+    const input = el("input", {
+      type: "text", value: r.title || "", class: "feed-edit-input",
+      style: "width:100%", placeholder: "频道显示名",
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") saveBtn.click();
+      if (ev.key === "Escape") { state.feedEditKey = null; renderTable(); }
+    });
+    const saveBtn = el("button", { class: "btn small primary", type: "button", text: "保存" });
+    saveBtn.addEventListener("click", async () => {
+      const title = input.value.trim();
+      if (!title) { toast("标题不能为空", "err"); return; }
+      try {
+        await bridge.apiPost("feed/rename", { url: r.url, title });
+        state.feedEditKey = null;
+        toast("已改名");
+        await load();
+      } catch (e) {
+        toast(e.message || "改名失败", "err");
+      }
+    });
+    feedTd.appendChild(
+      el("div", { class: "feed-title" },
+        el("span", { class: "feed-icon" }, iconSvg("rss")),
+        el("div", { class: "cron-edit", style: "flex:1;min-width:0" }, input, saveBtn,
+          el("button", { class: "btn small ghost", type: "button", onclick: () => { state.feedEditKey = null; renderTable(); }, text: "取消" }),
+        ),
+      ),
+    );
+  } else {
+    feedTd.appendChild(
       el("div", { class: "feed-title" },
         el("span", { class: "feed-icon", title: r.url }, iconSvg("rss")),
         el("div", { style: "min-width:0" },
-          el("div", { class: "feed-name", text: r.title || r.url }),
+          el("div", {
+            class: "feed-name feed-editable", text: r.title || r.url,
+            title: "点击改名", role: "button", tabindex: "0",
+            onclick: () => { state.feedEditKey = key; renderTable(); },
+            onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { state.feedEditKey = key; renderTable(); } },
+          }),
           el("span", { class: "feed-host", text: r.url }),
         ),
       ),
-    ),
-  );
+    );
+  }
+  tr.appendChild(feedTd);
 
   tr.appendChild(el("td", { class: "col-session", title: r.session, text: sessionLabel(r.session) }));
 
@@ -400,7 +438,7 @@ function dataRow(r, key) {
   return tr;
 }
 
-function previewRow() {
+function previewRow(r) {
   const inner = el("div", { class: "preview-inner" });
   if (state.preview.loading) {
     inner.appendChild(el("div", { class: "preview-hint", text: "正在拉取最新内容…" }));
@@ -419,6 +457,14 @@ function previewRow() {
       );
     }
     inner.appendChild(ul);
+  }
+  if (r && r.latest_link && !state.preview.loading) {
+    inner.appendChild(
+      el("div", { class: "latest-pushed" },
+        el("span", { text: "最近已推送：" }),
+        el("a", { href: r.latest_link, target: "_blank", rel: "noopener noreferrer", text: r.latest_link }),
+      ),
+    );
   }
   const body = el("div", { class: "preview-body open" }, inner);
   return el("tr", { class: "preview-row" }, el("td", { colspan: "7" }, body));
@@ -567,6 +613,7 @@ function fillSettings() {
   if (!s) return;
   document.getElementById("setAiSummary").checked = !!s.ai_summary;
   document.getElementById("setAiPrompt").value = s.ai_summary_prompt || "";
+  document.getElementById("setAiPrompt").placeholder = s.ai_summary_prompt_default || "";
   document.getElementById("setMaxItems").value = s.max_items_per_poll ?? "";
   document.getElementById("setTitleMax").value = s.title_max_length ?? "";
   document.getElementById("setDescMax").value = s.description_max_length ?? "";
@@ -748,6 +795,10 @@ document.getElementById("endpointForm").addEventListener("submit", async (ev) =>
 });
 
 document.getElementById("settingsSave").addEventListener("click", saveSettings);
+document.getElementById("promptReset").addEventListener("click", () => {
+  document.getElementById("setAiPrompt").value = "";
+  toast("已清空，保存后使用默认提示词");
+});
 
 async function main() {
   await bridge.ready();
