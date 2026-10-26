@@ -33,47 +33,13 @@
 
       <!-- 订阅 -->
       <section class="tab-panel active" id="panel-subs">
-        <div class="add-panel" id="addPanel" hidden>
-          <form id="addForm" novalidate>
-            <div class="field field-url">
-              <label for="addUrl">源地址</label>
-              <div class="url-row">
-                <input id="addUrl" type="text" required
-                  placeholder="RSS/Atom 地址，或 / 开头的 RSSHub 路由，如 /36kr/newsflashes" />
-                <button class="btn tonal" type="button" id="verifyBtn">验证</button>
-              </div>
-              <div class="verify-result" id="verifyResult"></div>
-            </div>
-            <div class="field">
-              <label for="addSession">推送到会话</label>
-              <input id="addSession" type="text" list="sessionList" required placeholder="平台:消息类型:ID" />
-              <datalist id="sessionList"></datalist>
-            </div>
-            <div class="field">
-              <label for="addCron">频率</label>
-              <select id="addCron">
-                <option value="0 */2 * * *">每 2 小时</option>
-                <option value="0 * * * *">每小时</option>
-                <option value="0 */6 * * *">每 6 小时</option>
-                <option value="0 8 * * *">每天 08:00</option>
-                <option value="0 9 * * *">每天 09:00</option>
-                <option value="custom">自定义 cron…</option>
-              </select>
-              <input id="addCronCustom" type="text" class="cron-input" hidden placeholder="分 时 日 月 周，如 0 10 * * 1" />
-            </div>
-            <div class="add-actions">
-              <button class="btn primary" type="submit" id="addSubmit">订阅</button>
-              <button class="btn tonal" type="button" id="addCancel">取消</button>
-            </div>
-          </form>
-        </div>
-
         <section class="sheet">
           <div class="table-toolbar" id="subsToolbar">
             <div class="search-box">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
               <input id="searchInput" type="search" placeholder="搜索标题、地址或会话" />
             </div>
+            <select id="categoryFilter" class="select-plain"><option value="">全部类别</option></select>
             <select id="sessionFilter" class="select-plain"><option value="">全部会话</option></select>
             <span class="row-count" id="rowCount"></span>
           </div>
@@ -161,6 +127,63 @@
         </section>
       </section>
     </main>
+
+    <!-- 添加订阅 modal -->
+    <div class="modal-overlay" id="addModal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <header class="modal-head">
+          <h2 id="modalTitle">添加订阅</h2>
+          <button class="btn ghost icon-only modal-close" id="modalClose" type="button" aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </header>
+        <div class="modal-body">
+          <form id="addForm" novalidate>
+            <div class="field">
+              <label for="addUrl">源地址</label>
+              <div class="url-row">
+                <input id="addUrl" type="text" required
+                  placeholder="RSS/Atom 地址，或 / 开头的 RSSHub 路由，如 /36kr/newsflashes" />
+                <button class="btn tonal" type="button" id="verifyBtn">验证</button>
+              </div>
+              <div class="verify-result" id="verifyResult"></div>
+            </div>
+            <div class="modal-grid">
+              <div class="field">
+                <label for="addCategory">类别</label>
+                <input id="addCategory" type="text" list="categoryList" placeholder="博客 / 论文 / 视频…可新建" />
+                <datalist id="categoryList"></datalist>
+              </div>
+              <div class="field">
+                <label for="addSession">推送到会话</label>
+                <input id="addSession" type="text" list="sessionList" required placeholder="平台:消息类型:ID" />
+                <datalist id="sessionList"></datalist>
+              </div>
+              <div class="field">
+                <label for="addCron">频率</label>
+                <select id="addCron">
+                  <option value="0 */2 * * *">每 2 小时</option>
+                  <option value="0 * * * *">每小时</option>
+                  <option value="0 */6 * * *">每 6 小时</option>
+                  <option value="0 8 * * *">每天 08:00</option>
+                  <option value="0 9 * * *">每天 09:00</option>
+                  <option value="custom">自定义 cron…</option>
+                </select>
+                <input id="addCronCustom" type="text" class="cron-input" hidden placeholder="分 时 日 月 周，如 0 10 * * 1" />
+              </div>
+            </div>
+          </form>
+          <div class="modal-preview" id="modalPreview" hidden>
+            <div class="preview-head">源内容预览</div>
+            <div id="modalPreviewBody"></div>
+          </div>
+        </div>
+        <footer class="modal-foot">
+          <button class="btn tonal" type="button" id="addCancel">取消</button>
+          <button class="btn primary" type="submit" form="addForm" id="addSubmit">订阅</button>
+        </footer>
+      </div>
+    </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script type="module" src="./app.js"></script>

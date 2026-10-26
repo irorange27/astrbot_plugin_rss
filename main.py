@@ -93,6 +93,7 @@ class RssPlugin(Star):
         self.context.register_web_api(f"{base}/settings", self._api_settings, ["GET"], "Read panel-related plugin settings")
         self.context.register_web_api(f"{base}/settings/save", self._api_settings_save, ["POST"], "Save panel-related plugin settings")
         self.context.register_web_api(f"{base}/feed/rename", self._api_feed_rename, ["POST"], "Rename a feed title")
+        self.context.register_web_api(f"{base}/feed/category", self._api_feed_category, ["POST"], "Set feed category")
 
     def parse_cron_expr(self, cron_expr: str):
         fields = cron_expr.split(" ")
@@ -811,6 +812,14 @@ class RssPlugin(Star):
                 "sessions": [
                     {"origin": k, "count": v} for k, v in sessions.items()
                 ],
+                "categories": sorted(
+                    {
+                        v["info"].get("category", "")
+                        for k, v in self.data_handler.data.items()
+                        if k not in ("rsshub_endpoints", "settings")
+                        and v["info"].get("category")
+                    }
+                ),
                 "ai_summary": self.ai_summary,
                 "rsshub_endpoints": self.data_handler.data.get(
                     "rsshub_endpoints", []
@@ -828,6 +837,7 @@ class RssPlugin(Star):
                     {
                         "url": url,
                         "title": info["info"].get("title", url),
+                        "category": info["info"].get("category", ""),
                         "session": user,
                         "cron_expr": sub["cron_expr"],
                         "last_update": sub["last_update"],
@@ -842,6 +852,7 @@ class RssPlugin(Star):
         url = (payload.get("url") or "").strip()
         cron = (payload.get("cron") or "").strip()
         session = (payload.get("session") or "").strip()
+        category = (payload.get("category") or "").strip()[:30]
         if not url or not cron or not session or ":" not in session:
             return error_response(
                 "url、cron、session 均不能为空，session 需形如 平台:消息类型:ID",
@@ -866,8 +877,14 @@ class RssPlugin(Star):
         except Exception as e:
             return error_response(f"解析频道失败: {str(e)}", status_code=502)
         entry = self.data_handler.data.setdefault(
-            url, {"subscribers": {}, "info": {"title": title, "description": desc}}
+            url,
+            {
+                "subscribers": {},
+                "info": {"title": title, "description": desc, "category": category},
+            },
         )
+        if category:
+            entry["info"]["category"] = category
         entry["subscribers"][session] = {
             "cron_expr": cron,
             "last_update": int(time.time()),
@@ -1074,6 +1091,17 @@ class RssPlugin(Star):
         self.is_hide_url = self.config.get("is_hide_url")
         self.is_compose = self.config.get("compose")
         return json_response({"saved": True})
+
+    async def _api_feed_category(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        category = (payload.get("category") or "").strip()[:30]
+        entry = self.data_handler.data.get(url)
+        if not entry:
+            return error_response("订阅源不存在", status_code=404)
+        entry["info"]["category"] = category
+        self.data_handler.save_data()
+        return json_response({"url": url, "category": category})
 
     async def _api_feed_rename(self):
         payload = await request.json(default={})

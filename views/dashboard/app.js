@@ -10,9 +10,11 @@ const state = {
   loading: true,
   error: null,
   addOpen: false,
-  verified: null, // {url, title} from 验证
+  verified: null, // {url, items} from 验证
   editingKey: null,
   feedEditKey: null,
+  catEditKey: null,
+  categoryFilter: "",
   confirmKey: null,
   previewKey: null,
   preview: { items: [], loading: false, error: null },
@@ -135,6 +137,17 @@ function renderHead() {
     ),
   );
   sf.value = cur;
+  const cats = state.summary?.categories || [];
+  const cf = document.getElementById("categoryFilter");
+  const curCat = cf.value;
+  cf.replaceChildren(
+    el("option", { value: "", text: "全部类别" }),
+    ...cats.map((c) => el("option", { value: c, text: c })),
+  );
+  cf.value = curCat;
+  document.getElementById("categoryList").replaceChildren(
+    ...cats.map((c) => el("option", { value: c })),
+  );
 }
 
 function switchTab(name) {
@@ -153,6 +166,9 @@ function switchTab(name) {
 function visibleRows() {
   const kw = state.filter.trim().toLowerCase();
   let rows = state.rows;
+  if (state.categoryFilter) {
+    rows = rows.filter((r) => (r.category || "") === state.categoryFilter);
+  }
   if (state.sessionFilter) rows = rows.filter((r) => r.session === state.sessionFilter);
   if (kw) rows = rows.filter((r) => `${r.title} ${r.url} ${r.session}`.toLowerCase().includes(kw));
   const key = state.sort.key;
@@ -216,7 +232,7 @@ function renderTable() {
   }
 
   const rows = visibleRows();
-  count.textContent = state.filter || state.sessionFilter
+  count.textContent = state.filter || state.sessionFilter || state.categoryFilter
     ? `${rows.length} / ${state.rows.length} 条`
     : `${rows.length} 条`;
 
@@ -224,10 +240,10 @@ function renderTable() {
     wrap.replaceChildren(
       el("div", { class: "state-block" },
         iconSvg("rss"),
-        el("div", { text: state.filter || state.sessionFilter ? "没有匹配的订阅" : "还没有订阅" }),
+        el("div", { text: state.filter || state.sessionFilter || state.categoryFilter ? "没有匹配的订阅" : "还没有订阅" }),
         el("div", {
           class: "hint",
-          text: state.filter || state.sessionFilter ? "换个关键词或会话试试" : "点击右上角「添加订阅」，填入 RSS 地址或 RSSHub 路由",
+          text: state.filter || state.sessionFilter || state.categoryFilter ? "换个关键词或筛选试试" : "点击右上角「添加订阅」，填入 RSS 地址或 RSSHub 路由",
         }),
       ),
     );
@@ -267,10 +283,33 @@ function renderTable() {
   table.appendChild(head);
 
   const tbody = el("tbody");
+  // group rows by category; uncategorized last, groups sorted by name
+  const groups = new Map();
   for (const r of rows) {
-    const key = `${r.url}|${r.session}`;
-    tbody.appendChild(dataRow(r, key));
-    if (state.previewKey === key) tbody.appendChild(previewRow(r));
+    const cat = r.category || "";
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(r);
+  }
+  const catNames = [...groups.keys()].sort((a, b) => {
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b, "zh");
+  });
+  for (const cat of catNames) {
+    const items = groups.get(cat);
+    tbody.appendChild(
+      el("tr", { class: "group-row" },
+        el("td", { colspan: "7" },
+          el("span", { class: "group-name", text: cat || "未分类" }),
+          el("span", { class: "group-count", text: `${items.length} 个源` }),
+        ),
+      ),
+    );
+    for (const r of items) {
+      const key = `${r.url}|${r.session}`;
+      tbody.appendChild(dataRow(r, key));
+      if (state.previewKey === key) tbody.appendChild(previewRow(r));
+    }
   }
   table.appendChild(tbody);
   wrap.replaceChildren(table);
@@ -461,6 +500,46 @@ function previewRow(r) {
       el("span", { class: "meta-v mono", text: r.session }),
     ),
   );
+  if (state.catEditKey === key) {
+    const input = el("input", {
+      type: "text", list: "categoryList", value: r.category || "",
+      placeholder: "类别，留空为未分类", class: "cat-input",
+    });
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") catSave.click();
+      if (ev.key === "Escape") { state.catEditKey = null; renderTable(); }
+    });
+    const catSave = el("button", { class: "btn small primary", type: "button", text: "保存" });
+    catSave.addEventListener("click", async () => {
+      try {
+        await bridge.apiPost("feed/category", { url: r.url, category: input.value.trim() });
+        state.catEditKey = null;
+        toast("类别已更新");
+        await load();
+      } catch (e) {
+        toast(e.message || "更新失败", "err");
+      }
+    });
+    meta.appendChild(
+      el("div", { class: "meta-row" },
+        el("span", { class: "meta-k", text: "类别" }),
+        input, catSave,
+        el("button", { class: "btn small ghost", type: "button", onclick: () => { state.catEditKey = null; renderTable(); }, text: "取消" }),
+      ),
+    );
+  } else {
+    meta.appendChild(
+      el("div", { class: "meta-row" },
+        el("span", { class: "meta-k", text: "类别" }),
+        el("a", {
+          class: "meta-v cat-editable", role: "button", tabindex: "0",
+          text: r.category || "未分类（点击设置）", title: "点击修改类别",
+          onclick: () => { state.catEditKey = key; renderTable(); },
+          onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { state.catEditKey = key; renderTable(); } },
+        }),
+      ),
+    );
+  }
   meta.appendChild(
     el("div", { class: "meta-row" },
       el("span", { class: "meta-k", text: "cron" }),
@@ -577,25 +656,45 @@ async function batchDelete() {
 async function verifyUrl() {
   const input = document.getElementById("addUrl");
   const out = document.getElementById("verifyResult");
+  const wrap = document.getElementById("modalPreview");
+  const body = document.getElementById("modalPreviewBody");
   const url = input.value.trim();
   state.verified = null;
   if (!url) {
     out.className = "verify-result err";
     out.textContent = "先填地址";
+    wrap.hidden = true;
     return;
   }
   out.className = "verify-result";
   out.textContent = "验证中…";
+  wrap.hidden = false;
+  body.replaceChildren(el("div", { class: "preview-hint", text: "正在拉取…" }));
   try {
     const items = await bridge.apiGet("preview", { url });
     state.verified = { url };
-    out.className = "verify-result ok";
-    out.textContent = items?.length
-      ? `✓ 可用，最新一条：${(items[0].title || "").slice(0, 40)}`
-      : "✓ 地址可访问，但当前拉不到条目";
+    if (items?.length) {
+      out.className = "verify-result ok";
+      out.textContent = `✓ 可用，共拉到 ${items.length} 条`;
+      const ul = el("ul", { class: "preview-list" });
+      for (const it of items) {
+        ul.appendChild(
+          el("li", {},
+            el("a", { href: it.link, target: "_blank", rel: "noopener noreferrer", text: it.title || it.link }),
+            it.pub_date ? el("span", { class: "p-date", text: it.pub_date.slice(0, 16) }) : null,
+          ),
+        );
+      }
+      body.replaceChildren(ul);
+    } else {
+      out.className = "verify-result ok";
+      out.textContent = "✓ 地址可访问，但当前拉不到条目";
+      body.replaceChildren(el("div", { class: "preview-hint", text: "没有条目（可能是风控或源失效）" }));
+    }
   } catch (e) {
     out.className = "verify-result err";
     out.textContent = e.message || "验证失败";
+    body.replaceChildren(el("div", { class: "preview-error", text: e.message || "拉取失败" }));
   }
 }
 
@@ -755,14 +854,25 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
   loadSettings();
 });
 
-document.getElementById("addBtn").addEventListener("click", () => {
-  state.addOpen = !state.addOpen;
-  document.getElementById("addPanel").hidden = !state.addOpen;
-  if (state.addOpen) document.getElementById("addUrl").focus();
+const addModal = document.getElementById("addModal");
+function openAdd() {
+  addModal.hidden = false;
+  document.getElementById("addUrl").focus();
+}
+function closeAdd() {
+  addModal.hidden = true;
+  document.getElementById("verifyResult").textContent = "";
+  document.getElementById("modalPreview").hidden = true;
+  state.verified = null;
+}
+document.getElementById("addBtn").addEventListener("click", openAdd);
+document.getElementById("modalClose").addEventListener("click", closeAdd);
+document.getElementById("addCancel").addEventListener("click", closeAdd);
+addModal.addEventListener("click", (ev) => {
+  if (ev.target === addModal) closeAdd();
 });
-document.getElementById("addCancel").addEventListener("click", () => {
-  state.addOpen = false;
-  document.getElementById("addPanel").hidden = true;
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !addModal.hidden) closeAdd();
 });
 document.getElementById("verifyBtn").addEventListener("click", verifyUrl);
 
@@ -782,17 +892,16 @@ document.getElementById("addForm").addEventListener("submit", async (ev) => {
     toast("请把地址、会话、频率都填上", "err");
     return;
   }
+  const category = document.getElementById("addCategory").value.trim();
   const btn = document.getElementById("addSubmit");
   btn.disabled = true;
   btn.textContent = "订阅中…";
   try {
-    const res = await bridge.apiPost("subscription", { url, session, cron });
+    const res = await bridge.apiPost("subscription", { url, session, cron, category });
     toast(`已订阅「${res.title || url}」`);
     document.getElementById("addUrl").value = "";
-    document.getElementById("verifyResult").textContent = "";
-    state.verified = null;
-    state.addOpen = false;
-    document.getElementById("addPanel").hidden = true;
+    document.getElementById("addCategory").value = "";
+    closeAdd();
     await load();
   } catch (e) {
     toast(e.message || "订阅失败", "err");
@@ -808,6 +917,10 @@ document.getElementById("searchInput").addEventListener("input", (ev) => {
 });
 document.getElementById("sessionFilter").addEventListener("change", (ev) => {
   state.sessionFilter = ev.target.value;
+  renderTable();
+});
+document.getElementById("categoryFilter").addEventListener("change", (ev) => {
+  state.categoryFilter = ev.target.value;
   renderTable();
 });
 document.getElementById("batchCancel").addEventListener("click", () => {

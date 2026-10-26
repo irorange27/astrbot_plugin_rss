@@ -390,3 +390,68 @@ tbody td { padding: 4px 10px; }
 .btn.small { height: 24px; padding: 0 4px; }
 .btn.small svg { width: 14px; height: 14px; }
 .col-check input { width: 13px; height: 13px; }
+
+/* ---- modal ---- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 20;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 8vh 16px 16px;
+}
+.modal {
+  width: 640px; max-width: 94vw; max-height: 82vh;
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: var(--shadow-pop);
+  animation: modal-in 160ms ease-out;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px 10px; border-bottom: 1px solid var(--border-weak);
+}
+.modal-head h2 { margin: 0; font-size: 1rem; font-weight: 700; }
+.modal-close { border-radius: 6px; }
+.modal-close svg { width: 18px; height: 18px; fill: currentColor; }
+.modal-body { padding: 14px 18px; overflow-y: auto; }
+.modal-grid {
+  display: grid; grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 12px; margin-top: 12px;
+}
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px; border-top: 1px solid var(--border-weak);
+  background: var(--surface-weak); border-radius: 0 0 12px 12px;
+}
+.modal-preview {
+  margin-top: 14px; border: 1px solid var(--border-weak);
+  border-radius: 8px; padding: 10px 12px;
+  max-height: 220px; overflow-y: auto;
+}
+.modal-preview .preview-head { padding-bottom: 4px; }
+.modal-preview .preview-list li { white-space: normal; }
+
+/* ---- category groups ---- */
+tr.group-row > td {
+  padding: 14px 12px 5px;
+  border-bottom: none;
+  background: transparent;
+}
+.group-name {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em;
+  color: var(--tonal-ink);
+}
+.group-count { margin-left: 8px; font-size: 0.6875rem; color: var(--faint); }
+tr.group-row + tr.data-row > td { border-top: 1px solid var(--border-weak); }
+
+/* category edit */
+.cat-editable { cursor: pointer; }
+.cat-editable:hover { color: var(--primary); }
+.cat-input {
+  height: 26px; border-radius: 6px; border: 1px solid var(--primary);
+  background: var(--surface); color: var(--text); font: inherit;
+  font-size: 0.75rem; padding: 0 8px; min-width: 160px;
+}
