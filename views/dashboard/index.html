@@ -151,14 +151,12 @@
             <div class="modal-grid">
               <div class="field">
                 <label for="addCategory">类别</label>
-                <input id="addCategory" type="text" list="categoryList" placeholder="博客 / 论文 / 视频…可新建" />
-                <datalist id="categoryList"></datalist>
-              </div>
+                <input id="addCategory" type="text" autocomplete="off" placeholder="博客 / 论文 / 视频…可新建" />
+                </div>
               <div class="field">
                 <label for="addSession">推送到会话</label>
-                <input id="addSession" type="text" list="sessionList" required placeholder="平台:消息类型:ID" />
-                <datalist id="sessionList"></datalist>
-              </div>
+                <input id="addSession" type="text" autocomplete="off" required placeholder="平台:消息类型:ID" />
+                </div>
               <div class="field">
                 <label for="addCron">频率</label>
                 <span id="addCronSel"></span>

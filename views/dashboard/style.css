@@ -501,11 +501,11 @@ tr.group-row + tr.data-row > td { border-top: 1px solid var(--border-weak); }
 .cselect-chevron { width: 16px; height: 16px; fill: var(--faint); flex: none; transition: transform 160ms ease-out; }
 .cselect.open .cselect-chevron { transform: rotate(180deg); }
 .cselect-menu {
-  position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%;
+  position: fixed;
   max-height: 300px; overflow-y: auto;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 8px; box-shadow: var(--shadow-pop);
-  padding: 4px; z-index: 40;
+  padding: 4px; z-index: 100;
 }
 .cselect-opt {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -518,3 +518,6 @@ tr.group-row + tr.data-row > td { border-top: 1px solid var(--border-weak); }
 .cselect-opt.selected { color: var(--tonal-ink); font-weight: 600; }
 .cselect-opt svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
 .cron-edit .cselect-btn { height: 28px; padding: 0 6px 0 8px; font-size: 0.8125rem; }
+
+/* ---- combobox: free-text input + themed suggestion menu ---- */
+.cbox { position: relative; display: block; min-width: 0; }
