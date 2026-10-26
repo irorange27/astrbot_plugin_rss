@@ -344,7 +344,7 @@ function dataRow(r, key) {
   } else {
     cronTd.appendChild(
       el("span", { class: "cron-cell", title: r.cron_expr },
-        el("span", { class: "cron-label", text: cronLabel(r.cron_expr) }),
+        el("span", { class: "cron-label", text: cronLabel(r.cron_expr) + " " }),
         el("span", { class: "cron-expr", text: r.cron_expr }),
       ),
     );
