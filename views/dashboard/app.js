@@ -16,6 +16,9 @@ const state = {
   catEditKey: null,
   categoryFilter: "",
   collapsed: new Set(), // category names hidden in the table
+  catDrop: null,
+  sessDrop: null,
+  cronDrop: null,
   confirmKey: null,
   previewKey: null,
   preview: { items: [], loading: false, error: null },
@@ -36,6 +39,7 @@ const CRON_PRESETS = [
 ];
 
 const ICONS = {
+  check: "M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
   rss: "M6.18 20a2.18 2.18 0 11-4.36 0 2.18 2.18 0 014.36 0zM2 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z",
   trash: "M6 19a2 2 0 002 2h8a2 2 0 002-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z",
   clock: "M12 2a10 10 0 100 20 10 10 0 000-20zm4.2 14.2L11 13V7h1.5v5.2l4.5 2.7-.8 1.3z",
@@ -68,6 +72,66 @@ function iconSvg(name) {
   path.setAttribute("d", ICONS[name]);
   svg.appendChild(path);
   return svg;
+}
+
+function createDropdown({ options, value, onChange }) {
+  let current = value;
+  let list = options;
+  const root = el("div", { class: "cselect" });
+  const label = el("span", { class: "cselect-label" });
+  const chev = iconSvg("chevron");
+  chev.setAttribute("class", "cselect-chevron");
+  const btn = el("button", { class: "cselect-btn", type: "button" }, label, chev);
+  const menu = el("div", { class: "cselect-menu", hidden: "" });
+
+  function renderMenu() {
+    menu.replaceChildren(
+      ...list.map((o) =>
+        el("button", {
+          class: `cselect-opt${o.value === current ? " selected" : ""}`,
+          type: "button",
+          onclick: () => { pick(o.value); },
+        },
+          el("span", { text: o.label }),
+          o.value === current ? iconSvg("check") : null,
+        ),
+      ),
+    );
+    const hit = list.find((o) => o.value === current);
+    label.textContent = hit ? hit.label : current;
+  }
+  function pick(v) {
+    current = v;
+    close();
+    renderMenu();
+    if (onChange) onChange(v);
+  }
+  function outside(e) {
+    if (!root.contains(e.target)) close();
+  }
+  function open() {
+    menu.hidden = false;
+    document.addEventListener("click", outside, true);
+  }
+  function close() {
+    menu.hidden = true;
+    document.removeEventListener("click", outside, true);
+  }
+  btn.addEventListener("click", () => {
+    if (menu.hidden) open();
+    else close();
+  });
+  root.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") close();
+  });
+  root.append(btn, menu);
+  renderMenu();
+  return {
+    el: root,
+    setOptions(list2) { list = list2; renderMenu(); },
+    get value() { return current; },
+    setValue(v) { current = v; renderMenu(); },
+  };
 }
 
 function cronLabel(cron) {
@@ -129,26 +193,25 @@ function renderHead() {
       el("option", { value: s.origin, text: `${sessionLabel(s.origin)}（${s.count} 个源）` }),
     ),
   );
-  const sf = document.getElementById("sessionFilter");
-  const cur = sf.value;
-  sf.replaceChildren(
-    el("option", { value: "", text: "全部会话" }),
-    ...(state.summary?.sessions || []).map((s) =>
-      el("option", { value: s.origin, text: `${sessionLabel(s.origin)} (${s.count})` }),
-    ),
-  );
-  sf.value = cur;
-  const cats = state.summary?.categories || [];
-  const cf = document.getElementById("categoryFilter");
-  const curCat = cf.value;
-  cf.replaceChildren(
-    el("option", { value: "", text: "全部类别" }),
-    ...cats.map((c) => el("option", { value: c, text: c })),
-  );
-  cf.value = curCat;
-  document.getElementById("categoryList").replaceChildren(
-    ...cats.map((c) => el("option", { value: c })),
-  );
+  if (state.sessDrop) {
+    state.sessDrop.setOptions([
+      { value: "", label: "全部会话" },
+      ...(state.summary?.sessions || []).map((s) => ({
+        value: s.origin,
+        label: `${sessionLabel(s.origin)} (${s.count})`,
+      })),
+    ]);
+  }
+  if (state.catDrop) {
+    const cats = state.summary?.categories || [];
+    state.catDrop.setOptions([
+      { value: "", label: "全部类别" },
+      ...cats.map((c) => ({ value: c, label: c })),
+    ]);
+    document.getElementById("categoryList").replaceChildren(
+      ...cats.map((c) => el("option", { value: c })),
+    );
+  }
 }
 
 function switchTab(name) {
@@ -422,20 +485,21 @@ function dataRow(r, key) {
 
   const cronTd = el("td");
   if (state.editingKey === key) {
-    const sel = el("select");
-    for (const [expr, label] of CRON_PRESETS) sel.appendChild(el("option", { value: expr, text: label }));
-    sel.appendChild(el("option", { value: "custom", text: "自定义…" }));
-    sel.value = CRON_PRESETS.some(([e]) => e === r.cron_expr) ? r.cron_expr : "custom";
+    const isPreset = CRON_PRESETS.some(([e]) => e === r.cron_expr);
     const input = el("input", {
       type: "text", class: "cron-input", placeholder: "分 时 日 月 周",
-      value: r.cron_expr, style: `display:${sel.value === "custom" ? "" : "none"};width:126px`,
+      value: r.cron_expr, style: `display:${isPreset ? "none" : ""};width:126px`,
     });
-    sel.addEventListener("change", () => {
-      input.style.display = sel.value === "custom" ? "" : "none";
-      if (sel.value === "custom") input.focus();
+    const cronDrop = createDropdown({
+      options: [...CRON_PRESETS.map(([v, l]) => ({ value: v, label: l })), { value: "custom", label: "自定义…" }],
+      value: isPreset ? r.cron_expr : "custom",
+      onChange: (v) => {
+        input.style.display = v === "custom" ? "" : "none";
+        if (v === "custom") input.focus();
+      },
     });
     const save = async () => {
-      const cron = (sel.value === "custom" ? input.value : sel.value).trim();
+      const cron = (cronDrop.value === "custom" ? input.value : cronDrop.value).trim();
       try {
         await bridge.apiPost("subscription/cron", { url: r.url, session: r.session, cron });
         state.editingKey = null;
@@ -446,7 +510,7 @@ function dataRow(r, key) {
       }
     };
     cronTd.appendChild(
-      el("div", { class: "cron-edit" }, sel, input,
+      el("div", { class: "cron-edit" }, cronDrop.el, input,
         el("button", { class: "btn small primary", type: "button", onclick: save, text: "保存" }),
         el("button", { class: "btn small ghost", type: "button", onclick: () => { state.editingKey = null; renderTable(); }, text: "取消" }),
       ),
@@ -900,7 +964,7 @@ function closeAdd() {
   document.getElementById("addUrl").value = "";
   document.getElementById("addCategory").value = "";
   document.getElementById("addSession").value = "";
-  cronSel.value = "0 */2 * * *";
+  state.cronDrop.setValue("0 */2 * * *");
   cronCustom.hidden = true;
   cronCustom.value = "";
   document.getElementById("verifyResult").textContent = "";
@@ -920,12 +984,16 @@ document.addEventListener("keydown", (ev) => {
 });
 document.getElementById("verifyBtn").addEventListener("click", verifyUrl);
 
-const cronSel = document.getElementById("addCron");
 const cronCustom = document.getElementById("addCronCustom");
-cronSel.addEventListener("change", () => {
-  cronCustom.hidden = cronSel.value !== "custom";
-  if (!cronCustom.hidden) cronCustom.focus();
+state.cronDrop = createDropdown({
+  options: [...CRON_PRESETS.map(([v, l]) => ({ value: v, label: l })), { value: "custom", label: "自定义 cron…" }],
+  value: "0 */2 * * *",
+  onChange: (v) => {
+    cronCustom.hidden = v !== "custom";
+    if (v === "custom") cronCustom.focus();
+  },
 });
+document.getElementById("addCronSel").replaceChildren(state.cronDrop.el);
 
 document.getElementById("addUrl").addEventListener("change", (ev) => {
   const expanded = expandUrl(ev.target.value);
@@ -935,7 +1003,8 @@ document.getElementById("addForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const url = expandUrl(document.getElementById("addUrl").value);
   const session = document.getElementById("addSession").value.trim();
-  const cron = (cronSel.value === "custom" ? cronCustom.value : cronSel.value).trim();
+  const dropVal = state.cronDrop.value;
+  const cron = (dropVal === "custom" ? cronCustom.value : dropVal).trim();
   if (!url || !session || !cron) {
     toast("请把地址、会话、频率都填上", "err");
     return;
@@ -963,14 +1032,18 @@ document.getElementById("searchInput").addEventListener("input", (ev) => {
   state.filter = ev.target.value;
   renderTable();
 });
-document.getElementById("sessionFilter").addEventListener("change", (ev) => {
-  state.sessionFilter = ev.target.value;
-  renderTable();
+state.sessDrop = createDropdown({
+  options: [{ value: "", label: "全部会话" }],
+  value: "",
+  onChange: (v) => { state.sessionFilter = v; renderTable(); },
 });
-document.getElementById("categoryFilter").addEventListener("change", (ev) => {
-  state.categoryFilter = ev.target.value;
-  renderTable();
+document.getElementById("sessionFilter").replaceChildren(state.sessDrop.el);
+state.catDrop = createDropdown({
+  options: [{ value: "", label: "全部类别" }],
+  value: "",
+  onChange: (v) => { state.categoryFilter = v; renderTable(); },
 });
+document.getElementById("categoryFilter").replaceChildren(state.catDrop.el);
 document.getElementById("batchCancel").addEventListener("click", () => {
   state.selected.clear();
   renderTable();

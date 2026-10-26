@@ -485,3 +485,36 @@ tr.group-row + tr.data-row > td { border-top: 1px solid var(--border-weak); }
 
 /* author display rules must never defeat the hidden attribute */
 [hidden] { display: none !important; }
+
+/* ---- custom dropdown (replaces native select popups) ---- */
+.cselect { position: relative; display: inline-block; }
+.cselect-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 6px;
+  height: 34px; min-width: 100%; padding: 0 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 0.8125rem; cursor: pointer;
+  transition: border-color 150ms ease-out;
+}
+.cselect-btn:hover { border-color: var(--primary); }
+.cselect-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cselect-chevron { width: 16px; height: 16px; fill: var(--faint); flex: none; transition: transform 160ms ease-out; }
+.cselect.open .cselect-chevron { transform: rotate(180deg); }
+.cselect-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%;
+  max-height: 300px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: var(--shadow-pop);
+  padding: 4px; z-index: 40;
+}
+.cselect-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 7px 10px; border: none; border-radius: 6px;
+  background: none; color: var(--text); font: inherit; font-size: 0.8125rem;
+  text-align: left; cursor: pointer; white-space: nowrap;
+  transition: background-color 120ms ease-out;
+}
+.cselect-opt:hover { background: var(--hover-row); }
+.cselect-opt.selected { color: var(--tonal-ink); font-weight: 600; }
+.cselect-opt svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
+.cron-edit .cselect-btn { height: 28px; padding: 0 6px 0 8px; font-size: 0.8125rem; }

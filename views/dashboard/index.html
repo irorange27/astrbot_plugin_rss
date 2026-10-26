@@ -39,8 +39,8 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
               <input id="searchInput" type="search" placeholder="搜索标题、地址或会话" />
             </div>
-            <select id="categoryFilter" class="select-plain"><option value="">全部类别</option></select>
-            <select id="sessionFilter" class="select-plain"><option value="">全部会话</option></select>
+            <span id="categoryFilter"></span>
+            <span id="sessionFilter"></span>
             <span class="row-count" id="rowCount"></span>
           </div>
           <div class="table-toolbar batch-bar" id="batchBar" hidden>
@@ -161,14 +161,7 @@
               </div>
               <div class="field">
                 <label for="addCron">频率</label>
-                <select id="addCron">
-                  <option value="0 */2 * * *">每 2 小时</option>
-                  <option value="0 * * * *">每小时</option>
-                  <option value="0 */6 * * *">每 6 小时</option>
-                  <option value="0 8 * * *">每天 08:00</option>
-                  <option value="0 9 * * *">每天 09:00</option>
-                  <option value="custom">自定义 cron…</option>
-                </select>
+                <span id="addCronSel"></span>
                 <input id="addCronCustom" type="text" class="cron-input" hidden placeholder="分 时 日 月 周，如 0 10 * * 1" />
               </div>
             </div>
