@@ -63,5 +63,18 @@
                 "default": 3
             }
         }
+    },
+    "ai_summary": {
+        "description": "推送前用 LLM 把新内容总结压缩成一条简报",
+        "type": "bool",
+        "hint": "开启后每次定时任务把新条目交给 LLM 总结，失败自动回退原文推送。",
+        "obvious_hint": true,
+        "default": true
+    },
+    "ai_summary_prompt": {
+        "description": "AI 摘要提示词",
+        "type": "text",
+        "hint": "定制摘要风格。",
+        "default": ""
     }
 }

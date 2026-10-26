@@ -163,3 +163,10 @@ A： 更新rss配置时，由于AsyncIOScheduler没正常删除旧任务导致�
 ## 贡献
 
 欢迎提交 issue 和 pull request 来帮助改进这个项目。
+
+## Fork 说明（irorange27 fork）
+
+基于 Soulter/astrbot_plugin_rss v1.1.2，增加：
+
+- **AI 摘要推送**：定时任务把新条目交给当前 LLM provider 压缩成一条中文简报再推送，失败自动回退原文推送。可在插件配置中开关（`ai_summary`）并定制提示词（`ai_summary_prompt`）。
+- **Atom 订阅源支持**：解析器同时兼容 RSS 2.0 `<item>` 与 Atom `<entry>`，ISO 8601 日期自动转换。

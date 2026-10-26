@@ -3,6 +3,7 @@ import asyncio
 import time
 import re
 import logging
+from datetime import datetime
 from lxml import etree
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -16,13 +17,19 @@ from .pic_handler import RssImageHandler
 from .rss import RSSItem
 from typing import List
 
+DEFAULT_DIGEST_PROMPT = (
+    "你是我的 RSS 阅读助理。把下面的订阅条目整理成一份简洁的中文简报："
+    "先一句话总结本期整体亮点，再逐条给出「一句话概括 + 为什么值得看」，"
+    "保留每条的原文链接。全文控制在一屏以内，不要寒暄，不要多余标题。"
+)
+
 
 @register(
     "astrbot_plugin_rss",
     "Soulter",
     "RSS订阅插件",
-    "1.1.0",
-    "https://github.com/Soulter/astrbot_plugin_rss",
+    "1.2.0",
+    "https://github.com/irorange27/astrbot_plugin_rss",
 )
 class RssPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
@@ -44,6 +51,8 @@ class RssPlugin(Star):
         self.is_adjust_pic= config.get("pic_config").get("is_adjust_pic")
         self.max_pic_item = config.get("pic_config").get("max_pic_item")
         self.is_compose = config.get("compose")
+        self.ai_summary = config.get("ai_summary", True)
+        self.ai_summary_prompt = config.get("ai_summary_prompt") or DEFAULT_DIGEST_PROMPT
 
         self.pic_handler = RssImageHandler(self.is_adjust_pic)
         self.scheduler = AsyncIOScheduler()
@@ -89,6 +98,27 @@ class RssPlugin(Star):
             self.logger.error(f"rss: 请求站点 {url} 发生未知错误: {str(e)}")
             return None
 
+    async def _ai_digest(self, rss_items: List[RSSItem]) -> str:
+        """Use the current LLM provider to compress new items into one digest."""
+        provider = self.context.get_using_provider()
+        if provider is None:
+            raise RuntimeError("no available LLM provider")
+        lines = []
+        for it in rss_items:
+            desc = self.data_handler.strip_html(it.description or "")[:400]
+            lines.append(f"标题: {it.title}\n内容: {desc}\n链接: {it.link}")
+        prompt = (
+            self.ai_summary_prompt
+            + "\n\n来源频道: "
+            + (rss_items[0].chan_title or "")
+            + "\n\n"
+            + "\n\n".join(lines)
+        )
+        resp = await provider.text_chat(
+            prompt=prompt, session_id="rss_digest", persist=False
+        )
+        return (resp.completion_text or "").strip()
+
     async def cron_task_callback(self, url: str, user: str):
         """定时任务回调"""
 
@@ -109,6 +139,24 @@ class RssPlugin(Star):
             after_link=latest_link,
         )
         max_ts = last_update
+
+        # AI digest mode: compress new items into one summarized message.
+        if rss_items and self.ai_summary:
+            try:
+                digest = await self._ai_digest(rss_items)
+                msc = MessageChain(chain=[Comp.Plain(digest)], use_t2i_=self.t2i)
+                await self.context.send_message(user, msc)
+                self.data_handler.data[url]["subscribers"][user]["last_update"] = max(
+                    max_ts, max(i.pubDate_timestamp for i in rss_items)
+                )
+                self.data_handler.data[url]["subscribers"][user]["latest_link"] = (
+                    rss_items[0].link
+                )
+                self.data_handler.save_data()
+                self.logger.info(f"RSS 定时任务 {url} AI 摘要推送成功 - {user}")
+                return
+            except Exception as e:
+                self.logger.warning(f"rss: AI 摘要失败，回退原文推送: {str(e)}")
 
         # 分解MessageSesion
         platform_name,message_type,session_id = user.split(":")
@@ -176,6 +224,9 @@ class RssPlugin(Star):
             return []
         root = etree.fromstring(text)
         items = root.xpath("//item")
+        if not items:
+            # Atom 格式：使用 <entry> 节点
+            items = root.xpath("//*[local-name()='entry']")
 
         cnt = 0
         rss_items = []
@@ -188,15 +239,31 @@ class RssPlugin(Star):
                     else "未知频道"
                 )
 
-                title = item.xpath("title")[0].text
+                # RSS 2.0 <item> and Atom <entry> are both supported.
+                title_els = item.xpath("title") or item.xpath(
+                    "*[local-name()='title']"
+                )
+                title = (title_els[0].text or "") if title_els else ""
                 if len(title) > self.title_max_length:
                     title = title[: self.title_max_length] + "..."
 
-                link = item.xpath("link")[0].text
-                if not re.match(r"^https?://", link):
+                link_els = item.xpath("link")
+                if link_els and link_els[0].text:
+                    link = link_els[0].text
+                else:
+                    hrefs = item.xpath(
+                        "*[local-name()='link'][not(@rel) or @rel='alternate']/@href"
+                    )
+                    link = hrefs[0] if hrefs else ""
+                if link and not re.match(r"^https?://", link):
                     link = self.data_handler.get_root_url(url) + link
 
-                description = item.xpath("description")[0].text
+                desc_els = (
+                    item.xpath("description")
+                    or item.xpath("*[local-name()='summary']")
+                    or item.xpath("*[local-name()='content']")
+                )
+                description = "".join(desc_els[0].itertext()) if desc_els else ""
 
                 pic_url_list = self.data_handler.strip_html_pic(description)
                 description = self.data_handler.strip_html(description)
@@ -206,14 +273,30 @@ class RssPlugin(Star):
                         description[: self.description_max_length] + "..."
                     )
 
-                if item.xpath("pubDate"):
-                    # 根据 pubDate 判断是否为新内容
-                    pub_date = item.xpath("pubDate")[0].text
+                pub_date = None
+                pub_date_timestamp = 0
+                pub_date_els = item.xpath("pubDate")
+                if pub_date_els:
+                    pub_date = pub_date_els[0].text
                     pub_date_parsed = time.strptime(
                         pub_date.replace("GMT", "+0000"),
                         "%a, %d %b %Y %H:%M:%S %z",
                     )
                     pub_date_timestamp = int(time.mktime(pub_date_parsed))
+                else:
+                    iso_els = item.xpath(
+                        "*[local-name()='updated']"
+                    ) or item.xpath("*[local-name()='published']")
+                    if iso_els and iso_els[0].text:
+                        pub_date = iso_els[0].text
+                        pub_date_timestamp = int(
+                            datetime.fromisoformat(
+                                pub_date.replace("Z", "+00:00")
+                            ).timestamp()
+                        )
+
+                if pub_date:
+                    # 根据 pubDate 判断是否为新内容
                     if pub_date_timestamp > after_timestamp:
                         rss_items.append(
                             RSSItem(
