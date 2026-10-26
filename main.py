@@ -18,13 +18,22 @@ from .pic_handler import RssImageHandler
 from .rss import RSSItem
 from typing import List
 
+import os
+
 PLUGIN_NAME = "astrbot_plugin_rss"
 
-DEFAULT_DIGEST_PROMPT = (
-    "你是我的 RSS 阅读助理。把下面的订阅条目整理成一份简洁的中文简报："
-    "先一句话总结本期整体亮点，再逐条给出「一句话概括 + 为什么值得看」，"
-    "保留每条的原文链接。全文控制在一屏以内，不要寒暄，不要多余标题。"
-)
+
+def _schema_default_prompt() -> str:
+    """Read the default ai_summary_prompt from _conf_schema.json."""
+    try:
+        import json as _json
+
+        schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_conf_schema.json")
+        with open(schema_path, encoding="utf-8") as f:
+            schema = _json.load(f)
+        return schema.get("ai_summary_prompt", {}).get("default", "")
+    except Exception:
+        return ""
 
 
 @register(
@@ -55,7 +64,9 @@ class RssPlugin(Star):
         self.max_pic_item = config.get("pic_config").get("max_pic_item")
         self.is_compose = config.get("compose")
         self.ai_summary = config.get("ai_summary", True)
-        self.ai_summary_prompt = config.get("ai_summary_prompt") or DEFAULT_DIGEST_PROMPT
+        self.ai_summary_prompt = config.get("ai_summary_prompt") or _schema_default_prompt()
+        if not config.get("ai_summary_prompt"):
+            config["ai_summary_prompt"] = self.ai_summary_prompt
 
         self.pic_handler = RssImageHandler(self.is_adjust_pic)
         self.scheduler = AsyncIOScheduler()
@@ -1021,7 +1032,7 @@ class RssPlugin(Star):
         return json_response(
             {
                 **{k: self.config.get(k) for k in self._PANEL_SETTING_KEYS},
-                "ai_summary_prompt_default": DEFAULT_DIGEST_PROMPT,
+                "ai_summary_prompt_default": _schema_default_prompt(),
                 "pic_config": {
                     "is_read_pic": pic.get("is_read_pic"),
                     "is_adjust_pic": pic.get("is_adjust_pic"),
@@ -1048,12 +1059,14 @@ class RssPlugin(Star):
             for k in ("is_read_pic", "is_adjust_pic", "max_pic_item"):
                 if k in payload["pic_config"]:
                     pic[k] = payload["pic_config"][k]
+        # empty prompt falls back to the schema default, persisted too
+        self.config["ai_summary_prompt"] = (
+            self.config.get("ai_summary_prompt") or _schema_default_prompt()
+        )
         self.config.save_config()
         # reload runtime flags
         self.ai_summary = self.config.get("ai_summary", True)
-        self.ai_summary_prompt = (
-            self.config.get("ai_summary_prompt") or DEFAULT_DIGEST_PROMPT
-        )
+        self.ai_summary_prompt = self.config["ai_summary_prompt"]
         self.title_max_length = self.config.get("title_max_length")
         self.description_max_length = self.config.get("description_max_length")
         self.max_items_per_poll = self.config.get("max_items_per_poll")

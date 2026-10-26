@@ -613,7 +613,6 @@ function fillSettings() {
   if (!s) return;
   document.getElementById("setAiSummary").checked = !!s.ai_summary;
   document.getElementById("setAiPrompt").value = s.ai_summary_prompt || "";
-  document.getElementById("setAiPrompt").placeholder = s.ai_summary_prompt_default || "";
   document.getElementById("setMaxItems").value = s.max_items_per_poll ?? "";
   document.getElementById("setTitleMax").value = s.title_max_length ?? "";
   document.getElementById("setDescMax").value = s.description_max_length ?? "";
@@ -796,8 +795,9 @@ document.getElementById("endpointForm").addEventListener("submit", async (ev) =>
 
 document.getElementById("settingsSave").addEventListener("click", saveSettings);
 document.getElementById("promptReset").addEventListener("click", () => {
-  document.getElementById("setAiPrompt").value = "";
-  toast("已清空，保存后使用默认提示词");
+  const def = state.settings?.ai_summary_prompt_default || "";
+  document.getElementById("setAiPrompt").value = def;
+  toast(def ? "已填入默认提示词，记得保存" : "未取到默认值");
 });
 
 async function main() {
