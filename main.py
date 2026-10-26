@@ -930,6 +930,12 @@ class RssPlugin(Star):
         url = (url or "").strip()
         if not url:
             return error_response("缺少 url 参数", status_code=400)
+        if url.startswith("/"):
+            # RSSHub route shorthand: resolve against the default endpoint
+            endpoints = self.data_handler.data.get("rsshub_endpoints", [])
+            if not endpoints:
+                return error_response("没有可用的 RSSHub 端点", status_code=400)
+            url = endpoints[0].rstrip("/") + url
         items = await self.poll_rss(url, num=5, after_timestamp=0)
         return json_response(
             [

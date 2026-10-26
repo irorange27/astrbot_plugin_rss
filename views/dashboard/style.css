@@ -119,12 +119,12 @@ body {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 16px; margin-bottom: 16px;
 }
-#addForm { display: grid; grid-template-columns: 1.6fr 1.2fr 1fr auto; gap: 14px; align-items: start; }
+#addForm { display: flex; flex-direction: column; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field.grow { flex: 1; }
 .field label { font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
 .field input, .field select, .field textarea, .endpoint-add input {
-  height: 34px; padding: 0 10px; border-radius: 8px;
+  width: 100%; height: 34px; padding: 0 10px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface);
   color: var(--text); font: inherit; font-size: 0.875rem;
 }
@@ -418,9 +418,10 @@ tbody td { padding: 4px 10px; }
 .modal-close svg { width: 18px; height: 18px; fill: currentColor; }
 .modal-body { padding: 14px 18px; overflow-y: auto; }
 .modal-grid {
-  display: grid; grid-template-columns: 1fr 1.2fr 1fr;
+  display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.3fr) minmax(150px, 1fr);
   gap: 12px; margin-top: 12px;
 }
+.modal-grid .field label { white-space: nowrap; }
 .modal-foot {
   display: flex; justify-content: flex-end; gap: 8px;
   padding: 12px 18px; border-top: 1px solid var(--border-weak);
@@ -455,3 +456,9 @@ tr.group-row + tr.data-row > td { border-top: 1px solid var(--border-weak); }
   background: var(--surface); color: var(--text); font: inherit;
   font-size: 0.75rem; padding: 0 8px; min-width: 160px;
 }
+
+/* hidden attr must win over .modal-overlay display:flex */
+.modal-overlay[hidden] { display: none; }
+
+/* author display rules must never defeat the hidden attribute */
+[hidden] { display: none !important; }
