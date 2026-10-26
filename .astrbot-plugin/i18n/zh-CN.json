@@ -1,0 +1,8 @@
+{
+  "views": {
+    "dashboard": {
+      "title": "RSS 订阅管理",
+      "description": "管理 RSS/Atom 订阅：查看、添加、删除、调整推送频率，支持 AI 摘要。"
+    }
+  }
+}

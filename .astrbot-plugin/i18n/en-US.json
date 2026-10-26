@@ -1,0 +1,8 @@
+{
+  "views": {
+    "dashboard": {
+      "title": "RSS Subscriptions",
+      "description": "Manage RSS/Atom subscriptions: view, add, remove, adjust push frequency, with AI digests."
+    }
+  }
+}

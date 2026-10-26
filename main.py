@@ -10,12 +10,15 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult,MessageChain
 from astrbot.api.star import Context, Star, register
 from astrbot.api import AstrBotConfig
+from astrbot.api.web import error_response, json_response, request
 import astrbot.api.message_components as Comp
 
 from .data_handler import DataHandler
 from .pic_handler import RssImageHandler
 from .rss import RSSItem
 from typing import List
+
+PLUGIN_NAME = "astrbot_plugin_rss"
 
 DEFAULT_DIGEST_PROMPT = (
     "你是我的 RSS 阅读助理。把下面的订阅条目整理成一份简洁的中文简报："
@@ -59,6 +62,17 @@ class RssPlugin(Star):
         self.scheduler.start()
 
         self._fresh_asyncIOScheduler()
+        self._register_web_apis()
+
+    def _register_web_apis(self):
+        """Register backend APIs for the dashboard management panel."""
+        base = f"/{PLUGIN_NAME}"
+        self.context.register_web_api(f"{base}/summary", self._api_summary, ["GET"], "RSS panel summary")
+        self.context.register_web_api(f"{base}/subscriptions", self._api_subscriptions, ["GET"], "List all RSS subscriptions")
+        self.context.register_web_api(f"{base}/subscription", self._api_add_sub, ["POST"], "Add an RSS subscription")
+        self.context.register_web_api(f"{base}/subscription/delete", self._api_del_sub, ["POST"], "Delete an RSS subscription")
+        self.context.register_web_api(f"{base}/subscription/cron", self._api_cron_sub, ["POST"], "Update subscription cron")
+        self.context.register_web_api(f"{base}/preview", self._api_preview, ["GET"], "Preview latest items of a feed")
 
     def parse_cron_expr(self, cron_expr: str):
         fields = cron_expr.split(" ")
@@ -750,3 +764,139 @@ class RssPlugin(Star):
             yield event.chain_result([node]).use_t2i(self.t2i)
         else:
             yield event.chain_result(comps).use_t2i(self.t2i)
+
+    # ---- Dashboard panel Web APIs ----
+
+    def _valid_cron(self, expr: str) -> bool:
+        fields = expr.split()
+        return len(fields) == 5 and all(
+            re.fullmatch(r"[*/,\-\d]+", f) for f in fields
+        )
+
+    async def _api_summary(self):
+        feeds = 0
+        subs = 0
+        sessions = {}
+        for url, info in self.data_handler.data.items():
+            if url == "rsshub_endpoints" or url == "settings":
+                continue
+            feeds += 1
+            for user in info["subscribers"]:
+                subs += 1
+                sessions[user] = sessions.get(user, 0) + 1
+        return json_response(
+            {
+                "feeds": feeds,
+                "subscriptions": subs,
+                "sessions": [
+                    {"origin": k, "count": v} for k, v in sessions.items()
+                ],
+                "ai_summary": self.ai_summary,
+                "rsshub_endpoints": self.data_handler.data.get(
+                    "rsshub_endpoints", []
+                ),
+            }
+        )
+
+    async def _api_subscriptions(self):
+        rows = []
+        for url, info in self.data_handler.data.items():
+            if url == "rsshub_endpoints" or url == "settings":
+                continue
+            for user, sub in info["subscribers"].items():
+                rows.append(
+                    {
+                        "url": url,
+                        "title": info["info"].get("title", url),
+                        "session": user,
+                        "cron_expr": sub["cron_expr"],
+                        "last_update": sub["last_update"],
+                        "latest_link": sub["latest_link"],
+                    }
+                )
+        rows.sort(key=lambda r: r["title"])
+        return json_response(rows)
+
+    async def _api_add_sub(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        cron = (payload.get("cron") or "").strip()
+        session = (payload.get("session") or "").strip()
+        if not url or not cron or not session or ":" not in session:
+            return error_response(
+                "url、cron、session 均不能为空，session 需形如 平台:消息类型:ID",
+                status_code=400,
+            )
+        if not self._valid_cron(cron):
+            return error_response("cron 表达式须为 5 段（分 时 日 月 周）", status_code=400)
+        if url.startswith("/"):
+            endpoints = self.data_handler.data.get("rsshub_endpoints", [])
+            if not endpoints:
+                return error_response("没有可用的 RSSHub 端点", status_code=400)
+            url = endpoints[0].rstrip("/") + url
+        if not re.match(r"^https?://", url):
+            return error_response(
+                "地址需以 http(s):// 开头，或以 / 开头表示 RSSHub 路由", status_code=400
+            )
+        try:
+            text = await self.parse_channel_info(url)
+            if text is None:
+                return error_response("拉取该源失败，请确认地址可用", status_code=502)
+            title, desc = self.data_handler.parse_channel_text_info(text)
+        except Exception as e:
+            return error_response(f"解析频道失败: {str(e)}", status_code=502)
+        entry = self.data_handler.data.setdefault(
+            url, {"subscribers": {}, "info": {"title": title, "description": desc}}
+        )
+        entry["subscribers"][session] = {
+            "cron_expr": cron,
+            "last_update": int(time.time()),
+            "latest_link": "",
+        }
+        self.data_handler.save_data()
+        self._fresh_asyncIOScheduler()
+        return json_response({"url": url, "title": title})
+
+    async def _api_del_sub(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        session = (payload.get("session") or "").strip()
+        entry = self.data_handler.data.get(url)
+        if not entry or session not in entry.get("subscribers", {}):
+            return error_response("订阅不存在", status_code=404)
+        entry["subscribers"].pop(session)
+        if not entry["subscribers"]:
+            self.data_handler.data.pop(url)
+        self.data_handler.save_data()
+        self._fresh_asyncIOScheduler()
+        return json_response({"url": url, "session": session, "removed": True})
+
+    async def _api_cron_sub(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        session = (payload.get("session") or "").strip()
+        cron = (payload.get("cron") or "").strip()
+        entry = self.data_handler.data.get(url)
+        if not entry or session not in entry.get("subscribers", {}):
+            return error_response("订阅不存在", status_code=404)
+        if not self._valid_cron(cron):
+            return error_response("cron 表达式须为 5 段（分 时 日 月 周）", status_code=400)
+        entry["subscribers"][session]["cron_expr"] = cron
+        self.data_handler.save_data()
+        self._fresh_asyncIOScheduler()
+        return json_response({"url": url, "session": session, "cron_expr": cron})
+
+    async def _api_preview(self):
+        url = request.query.get("url", "")
+        if isinstance(url, tuple):
+            url = url[0]
+        url = (url or "").strip()
+        if not url:
+            return error_response("缺少 url 参数", status_code=400)
+        items = await self.poll_rss(url, num=5, after_timestamp=0)
+        return json_response(
+            [
+                {"title": i.title, "link": i.link, "pub_date": i.pubDate or ""}
+                for i in items
+            ]
+        )

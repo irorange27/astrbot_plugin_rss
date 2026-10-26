@@ -37,10 +37,14 @@ class DataHandler:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
 
     def parse_channel_text_info(self, text):
-        """解析RSS频道信息"""
+        """解析RSS频道信息，兼容 RSS 2.0 与 Atom"""
         root = etree.fromstring(text)
-        title = root.xpath("//title")[0].text
-        description = root.xpath("//description")[0].text
+        title_els = root.xpath("//title")
+        title = (title_els[0].text or "") if title_els else ""
+        desc_els = root.xpath("//description") or root.xpath(
+            "//*[local-name()='subtitle']"
+        )
+        description = (desc_els[0].text or "") if desc_els else ""
         return title, description
 
     def strip_html_pic(self, html)-> list[str]:

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RSS 订阅管理</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-head">
+        <div class="head-text">
+          <h1 id="pageTitle">RSS 订阅</h1>
+          <p class="stat-line" id="statLine">正在加载…</p>
+        </div>
+        <div class="head-actions">
+          <button class="btn tonal" id="refreshBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4l-2.35 2.35z"/></svg>
+            <span>刷新</span>
+          </button>
+          <button class="btn primary" id="addBtn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+            <span>添加订阅</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="add-panel" id="addPanel" hidden>
+        <form id="addForm" novalidate>
+          <div class="field field-url">
+            <label for="addUrl">源地址</label>
+            <input id="addUrl" name="url" type="text" required
+              placeholder="完整 RSS/Atom 地址，或 / 开头的 RSSHub 路由，如 /36kr/newsflashes" />
+          </div>
+          <div class="field">
+            <label for="addSession">推送到会话</label>
+            <input id="addSession" name="session" type="text" list="sessionList" required
+              placeholder="平台:消息类型:ID" />
+            <datalist id="sessionList"></datalist>
+          </div>
+          <div class="field">
+            <label for="addCron">频率</label>
+            <select id="addCron">
+              <option value="0 */2 * * *">每 2 小时</option>
+              <option value="0 * * * *">每小时</option>
+              <option value="0 */6 * * *">每 6 小时</option>
+              <option value="0 8 * * *">每天 08:00</option>
+              <option value="0 9 * * *">每天 09:00</option>
+              <option value="custom">自定义 cron…</option>
+            </select>
+            <input id="addCronCustom" type="text" class="cron-input" hidden
+              placeholder="分 时 日 月 周，如 0 10 * * 1" />
+          </div>
+          <div class="add-actions">
+            <button class="btn primary" type="submit" id="addSubmit">订阅</button>
+            <button class="btn tonal" type="button" id="addCancel">取消</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="sheet">
+        <div class="table-toolbar">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+            <input id="searchInput" type="search" placeholder="搜索标题、地址或会话" />
+          </div>
+          <span class="row-count" id="rowCount"></span>
+        </div>
+
+        <div class="table-wrap" id="tableWrap"></div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
