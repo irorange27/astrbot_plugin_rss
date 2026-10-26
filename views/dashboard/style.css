@@ -49,6 +49,9 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
 
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -123,6 +126,15 @@ body {
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field.grow { flex: 1; }
 .field label { font-size: 0.8125rem; font-weight: 600; color: var(--muted); }
+.field select {
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; background-size: 16px;
+  padding-right: 28px;
+}
+[data-theme="dark"] .field select {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23aaa'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
+}
 .field input, .field select, .field textarea, .endpoint-add input {
   width: 100%; height: 34px; padding: 0 10px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--surface);
@@ -170,7 +182,13 @@ body {
 .select-plain {
   height: 34px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface); color: var(--text); font: inherit;
-  font-size: 0.8125rem; padding: 0 8px; max-width: 220px;
+  font-size: 0.8125rem; padding: 0 26px 0 8px; max-width: 220px;
+  appearance: none; -webkit-appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 6px center; background-size: 16px;
+}
+[data-theme="dark"] .select-plain {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23aaa'%3E%3Cpath d='M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z'/%3E%3C/svg%3E");
 }
 
 .row-count { color: var(--muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; margin-left: auto; white-space: nowrap; }
@@ -441,6 +459,11 @@ tr.group-row > td {
   border-bottom: none;
   background: transparent;
 }
+tr.group-row { cursor: pointer; user-select: none; }
+tr.group-row:hover .group-name { text-decoration: underline; text-underline-offset: 3px; }
+.group-head { display: inline-flex; align-items: center; gap: 6px; }
+.group-chevron { width: 14px; height: 14px; fill: var(--faint); transition: transform 160ms ease-out; }
+.group-chevron.collapsed { transform: rotate(-90deg); }
 .group-name {
   font-size: 0.75rem; font-weight: 700; letter-spacing: 0.03em;
   color: var(--tonal-ink);

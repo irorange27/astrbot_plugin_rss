@@ -15,6 +15,7 @@ const state = {
   feedEditKey: null,
   catEditKey: null,
   categoryFilter: "",
+  collapsed: new Set(), // category names hidden in the table
   confirmKey: null,
   previewKey: null,
   preview: { items: [], loading: false, error: null },
@@ -297,18 +298,42 @@ function renderTable() {
   });
   for (const cat of catNames) {
     const items = groups.get(cat);
+    const collapsed = state.collapsed.has(cat);
+    const chevron = iconSvg("chevron");
+    chevron.setAttribute("class", `group-chevron${collapsed ? " collapsed" : ""}`);
     tbody.appendChild(
-      el("tr", { class: "group-row" },
+      el("tr", {
+        class: "group-row",
+        role: "button",
+        tabindex: "0",
+        "aria-expanded": collapsed ? "false" : "true",
+        onclick: () => {
+          if (collapsed) state.collapsed.delete(cat);
+          else state.collapsed.add(cat);
+          renderTable();
+        },
+        onkeydown: (ev) => {
+          if (ev.key === "Enter" || ev.key === " ") {
+            if (collapsed) state.collapsed.delete(cat);
+            else state.collapsed.add(cat);
+            renderTable();
+          }
+        },
+      },
         el("td", { colspan: "7" },
-          el("span", { class: "group-name", text: cat || "未分类" }),
-          el("span", { class: "group-count", text: `${items.length} 个源` }),
+          el("span", { class: "group-head" },
+            chevron,
+            el("span", { class: "group-name", text: cat || "未分类" }),
+            el("span", { class: "group-count", text: `${items.length} 个源` }),
+          ),
         ),
       ),
     );
+    if (collapsed) continue;
     for (const r of items) {
       const key = `${r.url}|${r.session}`;
       tbody.appendChild(dataRow(r, key));
-      if (state.previewKey === key) tbody.appendChild(previewRow(r));
+      if (state.previewKey === key) tbody.appendChild(previewRow(r, key));
     }
   }
   table.appendChild(tbody);
@@ -469,6 +494,8 @@ function dataRow(r, key) {
   if (state.confirmKey === key) {
     actions.appendChild(
       el("button", { class: "btn small danger", type: "button", onclick: () => removeSub(r), text: "确认删除" }),
+    );
+    actions.appendChild(
       el("button", { class: "btn small ghost", type: "button", onclick: () => { state.confirmKey = null; renderTable(); }, text: "取消" }),
     );
   } else {
@@ -483,7 +510,7 @@ function dataRow(r, key) {
   return tr;
 }
 
-function previewRow(r) {
+function previewRow(r, key) {
   const inner = el("div", { class: "preview-inner" });
 
   // detail meta: full url, raw session, watermark
@@ -653,8 +680,17 @@ async function batchDelete() {
 
 /* ---------- add form ---------- */
 
+function expandUrl(v) {
+  v = (v || "").trim();
+  if (v.startsWith("/") && state.endpoints.endpoints?.length) {
+    return state.endpoints.endpoints[0].replace(/\/$/, "") + v;
+  }
+  return v;
+}
+
 async function verifyUrl() {
   const input = document.getElementById("addUrl");
+  input.value = expandUrl(input.value);
   const out = document.getElementById("verifyResult");
   const wrap = document.getElementById("modalPreview");
   const body = document.getElementById("modalPreviewBody");
@@ -861,8 +897,16 @@ function openAdd() {
 }
 function closeAdd() {
   addModal.hidden = true;
+  document.getElementById("addUrl").value = "";
+  document.getElementById("addCategory").value = "";
+  document.getElementById("addSession").value = "";
+  cronSel.value = "0 */2 * * *";
+  cronCustom.hidden = true;
+  cronCustom.value = "";
   document.getElementById("verifyResult").textContent = "";
+  document.getElementById("verifyResult").className = "verify-result";
   document.getElementById("modalPreview").hidden = true;
+  document.getElementById("modalPreviewBody").replaceChildren();
   state.verified = null;
 }
 document.getElementById("addBtn").addEventListener("click", openAdd);
@@ -883,9 +927,13 @@ cronSel.addEventListener("change", () => {
   if (!cronCustom.hidden) cronCustom.focus();
 });
 
+document.getElementById("addUrl").addEventListener("change", (ev) => {
+  const expanded = expandUrl(ev.target.value);
+  if (expanded !== ev.target.value.trim()) ev.target.value = expanded;
+});
 document.getElementById("addForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const url = document.getElementById("addUrl").value.trim();
+  const url = expandUrl(document.getElementById("addUrl").value);
   const session = document.getElementById("addSession").value.trim();
   const cron = (cronSel.value === "custom" ? cronCustom.value : cronSel.value).trim();
   if (!url || !session || !cron) {
