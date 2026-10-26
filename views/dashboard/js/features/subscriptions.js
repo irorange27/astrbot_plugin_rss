@@ -173,8 +173,9 @@ function renderTable() {
     const anyCollapsed = catNames.some((c) => state.collapsed.has(c));
     gt.replaceChildren(
       el("button", {
-        class: "btn small tonal", type: "button",
-        title: anyCollapsed ? "展开所有分类" : "折叠所有分类",
+        class: "btn small tonal icon-only", type: "button",
+        "aria-label": anyCollapsed ? "展开全部分组" : "收起全部分组",
+        title: anyCollapsed ? "展开全部分组" : "收起全部分组",
         onclick: () => {
           if (anyCollapsed) state.collapsed.clear();
           else catNames.forEach((c) => state.collapsed.add(c));
@@ -182,7 +183,6 @@ function renderTable() {
         },
       },
         iconSvg(anyCollapsed ? "unfoldMore" : "unfoldLess"),
-        el("span", { text: anyCollapsed ? "展开全部分组" : "收起全部分组" }),
       ),
     );
   } else {

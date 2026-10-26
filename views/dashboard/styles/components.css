@@ -504,3 +504,6 @@ border-color: var(--primary);
   .grid-3, .switch-cols { grid-template-columns: 1fr 1fr; }
   .col-time-next { display: none; }
 }
+
+/* icon-only button (tooltips carry the label) */
+.btn.icon-only { padding: 0 7px; }
