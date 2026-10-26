@@ -74,14 +74,22 @@ function iconSvg(name) {
   return svg;
 }
 
-function portalMenu(menu, anchor) {
+function portalMenu(menu, anchor, flip = true) {
   // Render the menu at body level so no ancestor overflow clips it.
+  // Flips above the anchor when there is not enough room below.
   document.body.appendChild(menu);
   const place = () => {
     const r = anchor.getBoundingClientRect();
     menu.style.left = r.left + "px";
-    menu.style.top = r.bottom + 4 + "px";
     menu.style.minWidth = r.width + "px";
+    const mh = menu.offsetHeight || 0;
+    const below = window.innerHeight - r.bottom - 8;
+    const above = r.top - 8;
+    let top;
+    if (flip && mh > below && above > below) top = r.top - 4 - mh;
+    else top = r.bottom + 4;
+    top = Math.max(8, Math.min(top, window.innerHeight - mh - 8));
+    menu.style.top = top + "px";
   };
   place();
   const onMove = () => place();
@@ -99,28 +107,54 @@ function portalMenu(menu, anchor) {
 function createDropdown({ options, value, onChange }) {
   let current = value;
   let list = options;
+  let active = -1;
+  const uid = `csl-${Math.random().toString(36).slice(2, 8)}`;
   const root = el("div", { class: "cselect" });
   const label = el("span", { class: "cselect-label" });
   const chev = iconSvg("chevron");
   chev.setAttribute("class", "cselect-chevron");
-  const btn = el("button", { class: "cselect-btn", type: "button" }, label, chev);
-  const menu = el("div", { class: "cselect-menu", hidden: "" });
+  const btn = el("button", {
+    class: "cselect-btn", type: "button",
+    "aria-haspopup": "listbox", "aria-expanded": "false",
+    "aria-controls": uid,
+  }, label, chev);
+  const menu = el("div", {
+    class: "cselect-menu", role: "listbox", id: uid, hidden: "",
+  });
 
+  function optionEls() { return [...menu.querySelectorAll(".cselect-opt")]; }
   function renderMenu() {
     menu.replaceChildren(
-      ...list.map((o) =>
-        el("button", {
-          class: `cselect-opt${o.value === current ? " selected" : ""}`,
+      ...list.map((o, i) => {
+        const b = el("button", {
+          class: `cselect-opt${o.value === current ? " selected" : ""}${i === active ? " active" : ""}`,
           type: "button",
+          role: "option",
+          "aria-selected": o.value === current ? "true" : "false",
           onclick: () => { pick(o.value); },
+          onmouseenter: () => { active = i; paint(); },
         },
           el("span", { text: o.label }),
           o.value === current ? iconSvg("check") : null,
-        ),
-      ),
+        );
+        if (i === active) b.setAttribute("id", `${uid}-active`);
+        return b;
+      }),
     );
     const hit = list.find((o) => o.value === current);
     label.textContent = hit ? hit.label : current;
+    const act = optionEls()[active];
+    menu.setAttribute("aria-activedescendant", act ? act.id || "" : "");
+  }
+  function paint() {
+    optionEls().forEach((b, i) => {
+      b.classList.toggle("active", i === active);
+      if (i === active) {
+        b.setAttribute("id", `${uid}-active`);
+        b.scrollIntoView({ block: "nearest" });
+        menu.setAttribute("aria-activedescendant", b.id);
+      } else b.removeAttribute("id");
+    });
   }
   function pick(v) {
     current = v;
@@ -133,27 +167,49 @@ function createDropdown({ options, value, onChange }) {
     if (!root.contains(e.target) && !menu.contains(e.target)) close();
   }
   function open() {
+    active = Math.max(0, list.findIndex((o) => o.value === current));
     menu.hidden = false;
     portal = portalMenu(menu, btn);
+    renderMenu();
     document.addEventListener("click", outside, true);
+    btn.setAttribute("aria-expanded", "true");
+    const act = optionEls()[active];
+    if (act) act.scrollIntoView({ block: "nearest" });
   }
   function close() {
     menu.hidden = true;
+    active = -1;
     if (portal) { portal.stop(); portal = null; }
     document.removeEventListener("click", outside, true);
+    btn.setAttribute("aria-expanded", "false");
   }
   btn.addEventListener("click", () => {
-    if (menu.hidden) open();
+    if (menu.hidden) { btn.focus(); open(); }
     else close();
   });
   root.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") close();
+    if (menu.hidden) {
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp" || ev.key === "Enter") {
+        ev.preventDefault();
+        open();
+      }
+      return;
+    }
+    if (ev.key === "Escape") { ev.preventDefault(); close(); return; }
+    if (ev.key === "ArrowDown") { ev.preventDefault(); active = Math.min(list.length - 1, active + 1); paint(); return; }
+    if (ev.key === "ArrowUp") { ev.preventDefault(); active = Math.max(0, active - 1); paint(); return; }
+    if (ev.key === "Home") { ev.preventDefault(); active = 0; paint(); return; }
+    if (ev.key === "End") { ev.preventDefault(); active = list.length - 1; paint(); return; }
+    if (ev.key === "Enter" || ev.key === " ") {
+      ev.preventDefault();
+      if (active >= 0 && list[active]) pick(list[active].value);
+    }
   });
   root.append(btn, menu);
   renderMenu();
   return {
     el: root,
-    setOptions(list2) { list = list2; renderMenu(); },
+    setOptions(list2) { list = list2; if (active >= list.length) active = list.length - 1; renderMenu(); },
     get value() { return current; },
     setValue(v) { current = v; renderMenu(); },
   };
@@ -172,44 +228,98 @@ function cronDropdown(value, onChange) {
 
 function attachCombobox(input, getOptions) {
   // Themed suggestion menu for a free-text input; typing filters, picking fills.
+  const uid = `cbb-${Math.random().toString(36).slice(2, 8)}`;
   const wrap = el("div", { class: "cbox" });
   input.parentNode.insertBefore(wrap, input);
   wrap.appendChild(input);
-  const menu = el("div", { class: "cselect-menu cbox-menu", hidden: "" });
+  const menu = el("div", {
+    class: "cselect-menu cbox-menu", role: "listbox", id: uid, hidden: "",
+  });
   let portal = null;
+  let active = -1;
+  function visible() {
+    const kw = input.value.trim().toLowerCase();
+    return getOptions().filter((o) => !kw || o.toLowerCase().includes(kw));
+  }
   function outside(e) {
     if (!wrap.contains(e.target) && !menu.contains(e.target)) close();
   }
   function close() {
     menu.hidden = true;
+    active = -1;
+    input.removeAttribute("aria-activedescendant");
     if (portal) { portal.stop(); portal = null; }
     document.removeEventListener("click", outside, true);
   }
+  function pick(v) {
+    input.value = v;
+    close();
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  function paint() {
+    [...menu.querySelectorAll(".cselect-opt")].forEach((b, i) => {
+      b.classList.toggle("active", i === active);
+      if (i === active) {
+        b.setAttribute("id", `${uid}-active`);
+        b.scrollIntoView({ block: "nearest" });
+        input.setAttribute("aria-activedescendant", b.id);
+      } else b.removeAttribute("id");
+    });
+  }
   function render() {
-    const kw = input.value.trim().toLowerCase();
-    const opts = getOptions().filter((o) => !kw || o.toLowerCase().includes(kw));
+    const opts = visible();
     menu.replaceChildren(
-      ...opts.map((o) =>
+      ...opts.map((o, i) =>
         el("button", {
-          class: "cselect-opt", type: "button", text: o,
-          onclick: () => { input.value = o; close(); },
+          class: `cselect-opt${i === active ? " active" : ""}`,
+          type: "button", role: "option", "aria-selected": "false",
+          text: o,
+          onclick: () => { pick(o); },
+          onmouseenter: () => { active = i; paint(); },
         }),
       ),
     );
   }
   function open() {
+    active = -1;
     render();
+    if (!menu.children.length) return;
     menu.hidden = false;
     portal = portalMenu(menu, input);
     document.addEventListener("click", outside, true);
+    input.setAttribute("aria-expanded", "true");
+    input.setAttribute("aria-controls", uid);
   }
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("autocomplete", "off");
   input.addEventListener("focus", open);
   input.addEventListener("input", () => {
-    menu.hidden = false;
-    render();
+    active = -1;
+    open();
   });
   input.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape") close();
+    if (ev.key === "Escape") { close(); return; }
+    const opts = visible();
+    if (!opts.length) return;
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      if (menu.hidden) open();
+      active = Math.min(opts.length - 1, active + 1);
+      paint();
+      return;
+    }
+    if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      active = Math.max(0, active - 1);
+      paint();
+      return;
+    }
+    if (ev.key === "Enter" && active >= 0) {
+      ev.preventDefault();
+      pick(opts[active]);
+    }
   });
   return { refresh: render, close };
 }
@@ -430,6 +540,25 @@ function renderTable() {
     if (!b) return -1;
     return a.localeCompare(b, "zh");
   });
+  const gt = document.getElementById("groupToggle");
+  if (catNames.length > 1) {
+    const anyCollapsed = catNames.some((c) => state.collapsed.has(c));
+    gt.replaceChildren(
+      el("button", {
+        class: "btn small tonal", type: "button",
+        text: anyCollapsed ? "展开全部分组" : "收起全部分组",
+        title: anyCollapsed ? "展开所有分类" : "折叠所有分类",
+        onclick: () => {
+          if (anyCollapsed) state.collapsed.clear();
+          else catNames.forEach((c) => state.collapsed.add(c));
+          renderTable();
+        },
+      }),
+    );
+  } else {
+    gt.replaceChildren();
+  }
+
   for (const cat of catNames) {
     const items = groups.get(cat);
     const collapsed = state.collapsed.has(cat);
