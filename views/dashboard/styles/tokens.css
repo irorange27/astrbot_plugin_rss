@@ -1,0 +1,52 @@
+/* Design tokens extracted from the AstrBot dashboard themes. */
+
+:root {
+--bg: #ffffff;
+  --surface: #ffffff;
+  --surface-weak: #f7f9fb;
+  --text: #1b1c1d;
+  --muted: rgba(27, 28, 29, 0.62);
+  --faint: rgba(27, 28, 29, 0.42);
+  --border: #d0d0d0;
+  --border-weak: #e4e6ea;
+  --primary: #3c96ca;
+  --primary-btn: #2a7299;
+  --on-primary: #ffffff;
+  --tonal-bg: #eef2f6;
+  --tonal-ink: #1565c0;
+  --danger: #f44336;
+  --danger-ink: #c62828;
+  --danger-bg: #fdecea;
+  --success: #00a344;
+  --hover-row: rgba(60, 150, 202, 0.06);
+  --focus-ring: rgba(60, 150, 202, 0.55);
+  --shadow-pop: 0 8px 24px rgba(27, 28, 29, 0.14);
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+}
+
+[data-theme="dark"] {
+--bg: #1a1a1a;
+  --surface: #242424;
+  --surface-weak: #1f1f1f;
+  --text: #e8eaed;
+  --muted: rgba(232, 234, 237, 0.62);
+  --faint: rgba(232, 234, 237, 0.4);
+  --border: #3a3a3a;
+  --border-weak: #303030;
+  --primary: #5ba4d4;
+  --primary-btn: #5ba4d4;
+  --on-primary: #10222e;
+  --tonal-bg: #1a2e3d;
+  --tonal-ink: #8cc4e1;
+  --danger: #f44336;
+  --danger-ink: #ff8a80;
+  --danger-bg: #33201e;
+  --success: #4cd07d;
+  --hover-row: rgba(91, 164, 212, 0.1);
+  --focus-ring: rgba(91, 164, 212, 0.6);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+:root {
+color-scheme: light;
+}

@@ -1,0 +1,64 @@
+/* Page frame: header, stats line, tab bar. */
+
+.page {
+max-width: 1120px; margin: 0 auto; padding: 20px 24px 56px;
+}
+
+.page-head {
+display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; margin: 4px 0 14px; flex-wrap: wrap;
+}
+
+.page-head h1 {
+margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em;
+}
+
+.stat-line {
+margin: 4px 0 0; color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums;
+}
+
+.head-actions {
+display: flex; gap: 8px;
+}
+
+.tabs {
+display: flex; gap: 4px; border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.tab {
+appearance: none; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 0.9rem; font-weight: 600; color: var(--muted);
+  padding: 9px 14px 11px; margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  transition: color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.tab:hover {
+color: var(--text);
+}
+
+.tab.active {
+color: var(--primary); border-bottom-color: var(--primary);
+}
+
+.tab-panel {
+display: none;
+}
+
+.tab-panel.active {
+display: block;
+}
+
+.table-toolbar {
+display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border-weak);
+}
+
+.table-toolbar.batch-bar {
+background: var(--tonal-bg); color: var(--tonal-ink);
+}
+
+.table-wrap {
+overflow-x: auto;
+}
