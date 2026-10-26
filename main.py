@@ -72,7 +72,15 @@ class RssPlugin(Star):
         self.context.register_web_api(f"{base}/subscription", self._api_add_sub, ["POST"], "Add an RSS subscription")
         self.context.register_web_api(f"{base}/subscription/delete", self._api_del_sub, ["POST"], "Delete an RSS subscription")
         self.context.register_web_api(f"{base}/subscription/cron", self._api_cron_sub, ["POST"], "Update subscription cron")
+        self.context.register_web_api(f"{base}/subscription/delete-batch", self._api_del_batch, ["POST"], "Delete RSS subscriptions in batch")
         self.context.register_web_api(f"{base}/preview", self._api_preview, ["GET"], "Preview latest items of a feed")
+        self.context.register_web_api(f"{base}/push", self._api_push, ["POST"], "Push latest digest of a feed immediately")
+        self.context.register_web_api(f"{base}/jobs", self._api_jobs, ["GET"], "Next fire time of every scheduled poll")
+        self.context.register_web_api(f"{base}/endpoints", self._api_endpoints, ["GET"], "List RSSHub endpoints")
+        self.context.register_web_api(f"{base}/endpoint/add", self._api_endpoint_add, ["POST"], "Add an RSSHub endpoint")
+        self.context.register_web_api(f"{base}/endpoint/delete", self._api_endpoint_delete, ["POST"], "Delete an RSSHub endpoint")
+        self.context.register_web_api(f"{base}/settings", self._api_settings, ["GET"], "Read panel-related plugin settings")
+        self.context.register_web_api(f"{base}/settings/save", self._api_settings_save, ["POST"], "Save panel-related plugin settings")
 
     def parse_cron_expr(self, cron_expr: str):
         fields = cron_expr.split(" ")
@@ -900,3 +908,154 @@ class RssPlugin(Star):
                 for i in items
             ]
         )
+
+    async def _api_del_batch(self):
+        payload = await request.json(default={})
+        items = payload.get("items") or []
+        if not isinstance(items, list) or not items:
+            return error_response("items 不能为空", status_code=400)
+        removed = 0
+        for it in items:
+            url, session = (it.get("url") or "").strip(), (it.get("session") or "").strip()
+            entry = self.data_handler.data.get(url)
+            if entry and session in entry.get("subscribers", {}):
+                entry["subscribers"].pop(session)
+                if not entry["subscribers"]:
+                    self.data_handler.data.pop(url)
+                removed += 1
+        if removed:
+            self.data_handler.save_data()
+            self._fresh_asyncIOScheduler()
+        return json_response({"removed": removed})
+
+    async def _api_push(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        session = (payload.get("session") or "").strip()
+        entry = self.data_handler.data.get(url)
+        if not entry or session not in entry.get("subscribers", {}):
+            return error_response("订阅不存在", status_code=404)
+        rss_items = await self.poll_rss(url, num=3, after_timestamp=0)
+        if not rss_items:
+            return error_response("该源暂时拉取不到内容", status_code=502)
+        try:
+            if self.ai_summary:
+                digest = await self._ai_digest(rss_items)
+                msc = MessageChain(chain=[Comp.Plain(digest)], use_t2i_=self.t2i)
+            else:
+                msc = MessageChain(
+                    chain=await self._get_chain_components(rss_items[0]),
+                    use_t2i_=self.t2i,
+                )
+            await self.context.send_message(session, msc)
+        except Exception as e:
+            return error_response(f"推送失败: {str(e)}", status_code=500)
+        return json_response({"pushed": len(rss_items)})
+
+    async def _api_jobs(self):
+        jobs = []
+        for job in self.scheduler.get_jobs():
+            try:
+                url, user = job.args
+            except (TypeError, ValueError):
+                continue
+            jobs.append(
+                {
+                    "url": url,
+                    "session": user,
+                    "next_run": (
+                        int(job.next_run_time.timestamp())
+                        if job.next_run_time
+                        else 0
+                    ),
+                }
+            )
+        return json_response(jobs)
+
+    async def _api_endpoints(self):
+        return json_response(
+            {
+                "endpoints": self.data_handler.data.get("rsshub_endpoints", []),
+                "default": self.data_handler.data.get("rsshub_endpoints", [""])[0]
+                if self.data_handler.data.get("rsshub_endpoints")
+                else "",
+            }
+        )
+
+    async def _api_endpoint_add(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip().rstrip("/")
+        if not re.match(r"^https?://", url):
+            return error_response("端点需以 http(s):// 开头", status_code=400)
+        endpoints = self.data_handler.data.setdefault("rsshub_endpoints", [])
+        if url in endpoints:
+            return error_response("该端点已存在", status_code=400)
+        endpoints.append(url)
+        self.data_handler.save_data()
+        return json_response({"url": url})
+
+    async def _api_endpoint_delete(self):
+        payload = await request.json(default={})
+        url = (payload.get("url") or "").strip()
+        endpoints = self.data_handler.data.get("rsshub_endpoints", [])
+        if url not in endpoints:
+            return error_response("端点不存在", status_code=404)
+        endpoints.remove(url)
+        self.data_handler.save_data()
+        return json_response({"url": url, "removed": True})
+
+    _PANEL_SETTING_KEYS = (
+        "ai_summary",
+        "ai_summary_prompt",
+        "title_max_length",
+        "description_max_length",
+        "max_items_per_poll",
+        "t2i",
+        "is_hide_url",
+        "compose",
+    )
+
+    async def _api_settings(self):
+        pic = self.config.get("pic_config", {})
+        return json_response(
+            {
+                **{k: self.config.get(k) for k in self._PANEL_SETTING_KEYS},
+                "pic_config": {
+                    "is_read_pic": pic.get("is_read_pic"),
+                    "is_adjust_pic": pic.get("is_adjust_pic"),
+                    "max_pic_item": pic.get("max_pic_item"),
+                },
+            }
+        )
+
+    async def _api_settings_save(self):
+        payload = await request.json(default={})
+        for k in self._PANEL_SETTING_KEYS:
+            if k in payload and payload[k] is not None:
+                if k in ("ai_summary", "t2i", "is_hide_url", "compose"):
+                    if not isinstance(payload[k], bool):
+                        return error_response(f"{k} 须为布尔值", status_code=400)
+                if k in ("title_max_length", "description_max_length", "max_items_per_poll"):
+                    try:
+                        payload[k] = int(payload[k])
+                    except (TypeError, ValueError):
+                        return error_response(f"{k} 须为整数", status_code=400)
+                self.config[k] = payload[k]
+        if "pic_config" in payload and isinstance(payload["pic_config"], dict):
+            pic = self.config.setdefault("pic_config", {})
+            for k in ("is_read_pic", "is_adjust_pic", "max_pic_item"):
+                if k in payload["pic_config"]:
+                    pic[k] = payload["pic_config"][k]
+        self.config.save_config()
+        # reload runtime flags
+        self.ai_summary = self.config.get("ai_summary", True)
+        self.ai_summary_prompt = (
+            self.config.get("ai_summary_prompt") or DEFAULT_DIGEST_PROMPT
+        )
+        self.title_max_length = self.config.get("title_max_length")
+        self.description_max_length = self.config.get("description_max_length")
+        self.max_items_per_poll = self.config.get("max_items_per_poll")
+        self.t2i = self.config.get("t2i")
+        self.is_hide_url = self.config.get("is_hide_url")
+        self.is_compose = self.config.get("compose")
+        return json_response({"saved": True})

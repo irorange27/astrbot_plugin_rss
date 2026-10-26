@@ -25,49 +25,135 @@
         </div>
       </header>
 
-      <section class="add-panel" id="addPanel" hidden>
-        <form id="addForm" novalidate>
-          <div class="field field-url">
-            <label for="addUrl">源地址</label>
-            <input id="addUrl" name="url" type="text" required
-              placeholder="完整 RSS/Atom 地址，或 / 开头的 RSSHub 路由，如 /36kr/newsflashes" />
-          </div>
-          <div class="field">
-            <label for="addSession">推送到会话</label>
-            <input id="addSession" name="session" type="text" list="sessionList" required
-              placeholder="平台:消息类型:ID" />
-            <datalist id="sessionList"></datalist>
-          </div>
-          <div class="field">
-            <label for="addCron">频率</label>
-            <select id="addCron">
-              <option value="0 */2 * * *">每 2 小时</option>
-              <option value="0 * * * *">每小时</option>
-              <option value="0 */6 * * *">每 6 小时</option>
-              <option value="0 8 * * *">每天 08:00</option>
-              <option value="0 9 * * *">每天 09:00</option>
-              <option value="custom">自定义 cron…</option>
-            </select>
-            <input id="addCronCustom" type="text" class="cron-input" hidden
-              placeholder="分 时 日 月 周，如 0 10 * * 1" />
-          </div>
-          <div class="add-actions">
-            <button class="btn primary" type="submit" id="addSubmit">订阅</button>
-            <button class="btn tonal" type="button" id="addCancel">取消</button>
-          </div>
-        </form>
-      </section>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" role="tab" aria-selected="true" data-tab="subs">订阅</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="rsshub">RSSHub 端点</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="settings">设置</button>
+      </nav>
 
-      <section class="sheet">
-        <div class="table-toolbar">
-          <div class="search-box">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
-            <input id="searchInput" type="search" placeholder="搜索标题、地址或会话" />
-          </div>
-          <span class="row-count" id="rowCount"></span>
+      <!-- 订阅 -->
+      <section class="tab-panel active" id="panel-subs">
+        <div class="add-panel" id="addPanel" hidden>
+          <form id="addForm" novalidate>
+            <div class="field field-url">
+              <label for="addUrl">源地址</label>
+              <div class="url-row">
+                <input id="addUrl" type="text" required
+                  placeholder="RSS/Atom 地址，或 / 开头的 RSSHub 路由，如 /36kr/newsflashes" />
+                <button class="btn tonal" type="button" id="verifyBtn">验证</button>
+              </div>
+              <div class="verify-result" id="verifyResult"></div>
+            </div>
+            <div class="field">
+              <label for="addSession">推送到会话</label>
+              <input id="addSession" type="text" list="sessionList" required placeholder="平台:消息类型:ID" />
+              <datalist id="sessionList"></datalist>
+            </div>
+            <div class="field">
+              <label for="addCron">频率</label>
+              <select id="addCron">
+                <option value="0 */2 * * *">每 2 小时</option>
+                <option value="0 * * * *">每小时</option>
+                <option value="0 */6 * * *">每 6 小时</option>
+                <option value="0 8 * * *">每天 08:00</option>
+                <option value="0 9 * * *">每天 09:00</option>
+                <option value="custom">自定义 cron…</option>
+              </select>
+              <input id="addCronCustom" type="text" class="cron-input" hidden placeholder="分 时 日 月 周，如 0 10 * * 1" />
+            </div>
+            <div class="add-actions">
+              <button class="btn primary" type="submit" id="addSubmit">订阅</button>
+              <button class="btn tonal" type="button" id="addCancel">取消</button>
+            </div>
+          </form>
         </div>
 
-        <div class="table-wrap" id="tableWrap"></div>
+        <section class="sheet">
+          <div class="table-toolbar" id="subsToolbar">
+            <div class="search-box">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 10-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1114 9.5 4.5 4.5 0 019.5 14z"/></svg>
+              <input id="searchInput" type="search" placeholder="搜索标题、地址或会话" />
+            </div>
+            <select id="sessionFilter" class="select-plain"><option value="">全部会话</option></select>
+            <span class="row-count" id="rowCount"></span>
+          </div>
+          <div class="table-toolbar batch-bar" id="batchBar" hidden>
+            <span id="batchCount"></span>
+            <span class="batch-spacer"></span>
+            <button class="btn small danger" id="batchDelete" type="button">批量删除</button>
+            <button class="btn small ghost" id="batchCancel" type="button">取消</button>
+          </div>
+          <div class="table-wrap" id="tableWrap"></div>
+        </section>
+      </section>
+
+      <!-- RSSHub 端点 -->
+      <section class="tab-panel" id="panel-rsshub">
+        <section class="sheet">
+          <div class="table-toolbar">
+            <span class="toolbar-title">RSSHub 端点</span>
+            <span class="hint-inline">添加订阅时，「/路由」写法会自动拼接到默认端点（列表第一个）</span>
+          </div>
+          <div class="table-wrap" id="endpointWrap"></div>
+          <form class="endpoint-add" id="endpointForm">
+            <input id="endpointUrl" type="text" placeholder="http://localhost:1200" />
+            <button class="btn primary small" type="submit">添加端点</button>
+          </form>
+        </section>
+      </section>
+
+      <!-- 设置 -->
+      <section class="tab-panel" id="panel-settings">
+        <section class="sheet settings-sheet">
+          <div class="settings-section">
+            <div class="section-head">
+              <h2>AI 摘要</h2>
+              <p class="section-desc">开启后，每次定时推送先把新条目交给当前对话模型压缩成一条简报；失败自动回退原文推送。</p>
+            </div>
+            <div class="switch-row">
+              <span class="switch-label">启用 AI 摘要</span>
+              <label class="switch"><input type="checkbox" id="setAiSummary" /><span class="track"></span></label>
+            </div>
+            <div class="field grow">
+              <label for="setAiPrompt">摘要提示词</label>
+              <textarea id="setAiPrompt" rows="4" placeholder="留空使用默认提示词"></textarea>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-head">
+              <h2>推送内容</h2>
+              <p class="section-desc">控制每条推送的素材量与排版。</p>
+            </div>
+            <div class="grid-3">
+              <div class="field">
+                <label for="setMaxItems">每次最多取条目数</label>
+                <input id="setMaxItems" type="number" min="1" max="50" />
+              </div>
+              <div class="field">
+                <label for="setTitleMax">标题最大长度</label>
+                <input id="setTitleMax" type="number" min="10" max="200" />
+              </div>
+              <div class="field">
+                <label for="setDescMax">描述最大长度</label>
+                <input id="setDescMax" type="number" min="50" max="5000" />
+              </div>
+            </div>
+            <div class="switch-cols">
+              <div class="switch-row"><span class="switch-label">文字转图片发送</span><label class="switch"><input type="checkbox" id="setT2i" /><span class="track"></span></label></div>
+              <div class="switch-row"><span class="switch-label">隐藏链接（防风控）</span><label class="switch"><input type="checkbox" id="setHideUrl" /><span class="track"></span></label></div>
+              <div class="switch-row"><span class="switch-label">QQ 合并为转发消息</span><label class="switch"><input type="checkbox" id="setCompose" /><span class="track"></span></label></div>
+              <div class="switch-row"><span class="switch-label">携带条目配图</span><label class="switch"><input type="checkbox" id="setReadPic" /><span class="track"></span></label></div>
+              <div class="switch-row"><span class="switch-label">配图圆角修饰</span><label class="switch"><input type="checkbox" id="setAdjustPic" /><span class="track"></span></label></div>
+              <div class="field narrow"><label for="setMaxPic">配图最多张数</label><input id="setMaxPic" type="number" min="-1" max="20" /></div>
+            </div>
+          </div>
+
+          <div class="settings-foot">
+            <button class="btn primary" id="settingsSave" type="button">保存设置</button>
+            <span class="save-hint" id="saveHint"></span>
+          </div>
+        </section>
       </section>
     </main>
 
