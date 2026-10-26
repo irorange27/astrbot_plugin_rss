@@ -255,8 +255,7 @@ function renderTable() {
       el("th", { text: "频率" }),
       el("th", { class: "sortable col-time-next", onclick: () => setSort("next") }, el("span", { text: "下次推送" }), arrow("next")),
       el("th", { class: "sortable", onclick: () => setSort("last") }, el("span", { text: "最近检查" }), arrow("last")),
-      el("th", { class: "col-actions-header", text: "操作" }),
-    ),
+      el("th", { class: "col-actions-header", text: "操作" }),    ),
   );
   // indeterminate state
   const headCb = head.querySelector("input");
@@ -335,7 +334,7 @@ function dataRow(r, key) {
   } else {
     feedTd.appendChild(
       el("div", { class: "feed-title" },
-        el("span", { class: "feed-icon", title: r.url }, iconSvg("rss")),
+        el("span", { class: "feed-icon" }, iconSvg("rss")),
         el("div", { style: "min-width:0" },
           el("div", {
             class: "feed-name feed-editable", text: r.title || r.url,
@@ -343,14 +342,19 @@ function dataRow(r, key) {
             onclick: () => { state.feedEditKey = key; renderTable(); },
             onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { state.feedEditKey = key; renderTable(); } },
           }),
-          el("span", { class: "feed-host", text: r.url }),
+          el("span", { class: "feed-host", text: r.url, title: r.url }),
         ),
       ),
     );
   }
   tr.appendChild(feedTd);
 
-  tr.appendChild(el("td", { class: "col-session", title: r.session, text: sessionLabel(r.session) }));
+  tr.appendChild(
+    el("td", { class: "col-session" },
+      el("span", { class: "session-label", text: sessionLabel(r.session) }),
+      el("span", { class: "session-raw", text: r.session, title: r.session }),
+    ),
+  );
 
   const cronTd = el("td");
   if (state.editingKey === key) {
@@ -398,22 +402,24 @@ function dataRow(r, key) {
   if (next && next - Date.now() / 1000 < 3600) nextTd.classList.add("soon");
   tr.appendChild(nextTd);
 
-  tr.appendChild(el("td", { class: "col-time", text: relTime(r.last_update) }));
+  tr.appendChild(el("td", { class: "col-time", text: relTime(r.last_update), title: r.last_update ? new Date(r.last_update * 1000).toLocaleString() : "" }));
 
   const actions = el("td", { class: "col-actions" });
   const pushing = state.pushingKey === key;
   actions.appendChild(
     el("button", {
-      class: "btn small ghost", type: "button", title: "立即推送一条最新摘要",
-      disabled: pushing ? "" : null,
-      onclick: () => pushNow(r, key),
-    }, iconSvg("send"), el("span", { text: pushing ? "推送中…" : "推送" })),
+      class: `btn small ghost expand-toggle${state.previewKey === key ? " open" : ""}`,
+      type: "button",
+      title: state.previewKey === key ? "收起详情" : "展开详情与预览",
+      onclick: () => togglePreview(key),
+    }, iconSvg("chevron")),
   );
   actions.appendChild(
     el("button", {
-      class: "btn small ghost", type: "button", title: "预览最新内容",
-      onclick: () => togglePreview(key),
-    }, iconSvg(state.previewKey === key ? "chevron" : "open"), el("span", { text: "预览" })),
+      class: "btn small ghost", type: "button", title: "立即推送一条最新摘要",
+      disabled: pushing ? "" : null,
+      onclick: () => pushNow(r, key),
+    }, iconSvg("send")),
   );
   actions.appendChild(
     el("button", {
@@ -440,6 +446,48 @@ function dataRow(r, key) {
 
 function previewRow(r) {
   const inner = el("div", { class: "preview-inner" });
+
+  // detail meta: full url, raw session, watermark
+  const meta = el("div", { class: "detail-meta" });
+  meta.appendChild(
+    el("div", { class: "meta-row" },
+      el("span", { class: "meta-k", text: "地址" }),
+      el("a", { class: "meta-v mono", href: r.url, target: "_blank", rel: "noopener noreferrer", text: r.url }),
+    ),
+  );
+  meta.appendChild(
+    el("div", { class: "meta-row" },
+      el("span", { class: "meta-k", text: "会话" }),
+      el("span", { class: "meta-v mono", text: r.session }),
+    ),
+  );
+  meta.appendChild(
+    el("div", { class: "meta-row" },
+      el("span", { class: "meta-k", text: "cron" }),
+      el("span", { class: "meta-v mono", text: r.cron_expr }),
+    ),
+  );
+  meta.appendChild(
+    el("div", { class: "meta-row" },
+      el("span", { class: "meta-k", text: "水位" }),
+      r.last_update
+        ? el("span", { class: "meta-v", text: `${new Date(r.last_update * 1000).toLocaleString()}（${relTime(r.last_update)}）` })
+        : el("span", { class: "meta-v", text: "—" }),
+    ),
+  );
+  if (r.latest_link) {
+    meta.appendChild(
+      el("div", { class: "meta-row" },
+        el("span", { class: "meta-k", text: "最近推送" }),
+        el("a", { class: "meta-v mono link-clip", href: r.latest_link, target: "_blank", rel: "noopener noreferrer", text: r.latest_link }),
+      ),
+    );
+  }
+  inner.appendChild(meta);
+
+  const listHead = el("div", { class: "preview-head", text: "最新条目" });
+  inner.appendChild(listHead);
+
   if (state.preview.loading) {
     inner.appendChild(el("div", { class: "preview-hint", text: "正在拉取最新内容…" }));
   } else if (state.preview.error) {
@@ -457,14 +505,6 @@ function previewRow(r) {
       );
     }
     inner.appendChild(ul);
-  }
-  if (r && r.latest_link && !state.preview.loading) {
-    inner.appendChild(
-      el("div", { class: "latest-pushed" },
-        el("span", { text: "最近已推送：" }),
-        el("a", { href: r.latest_link, target: "_blank", rel: "noopener noreferrer", text: r.latest_link }),
-      ),
-    );
   }
   const body = el("div", { class: "preview-body open" }, inner);
   return el("tr", { class: "preview-row" }, el("td", { colspan: "7" }, body));
