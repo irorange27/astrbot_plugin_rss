@@ -375,3 +375,30 @@ height: 26px; border-radius: 6px; border: 1px solid var(--primary);
 .cron-edit .cselect-btn {
 height: 28px; padding: 0 6px 0 8px; font-size: 0.8125rem;
 }
+
+/* ---- responsive: table column budget (narrowing order) ---- */
+@media (max-width: 960px) {
+  tbody td, thead th { padding: 6px 8px; }
+  .col-feed { max-width: 280px; }
+  .feed-host { max-width: 230px; }
+  .col-session .session-raw { max-width: 110px; }
+  .col-actions .btn + .btn { margin-left: 0; }
+  .col-actions .btn { margin-right: 2px; }
+}
+
+@media (max-width: 760px) {
+  .col-time-next { display: none; }
+  .feed-host { max-width: 200px; }
+  .col-session .session-raw { max-width: 90px; }
+}
+
+@media (max-width: 620px) {
+  .col-check, .col-last, .col-session { display: none; }
+  .col-feed { max-width: 150px; }
+  .feed-host { max-width: 128px; }
+  .cron-cell .cron-expr { display: none; }
+  .cron-cell .cron-label { font-size: 0.75rem; }
+  tbody td, thead th { padding: 4px 4px; }
+  .col-actions .btn { margin-right: 0; }
+  .btn.small { padding: 0 3px; }
+}

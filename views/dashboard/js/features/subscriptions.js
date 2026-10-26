@@ -139,10 +139,10 @@ function renderTable() {
         }),
       ),
       el("th", { class: "sortable", onclick: () => setSort("title") }, el("span", { text: "频道" }), arrow("title")),
-      el("th", { text: "会话" }),
+      el("th", { class: "col-session", text: "会话" }),
       el("th", { text: "频率" }),
       el("th", { class: "sortable col-time-next", onclick: () => setSort("next") }, el("span", { text: "下次推送" }), arrow("next")),
-      el("th", { class: "sortable", onclick: () => setSort("last") }, el("span", { text: "最近检查" }), arrow("last")),
+      el("th", { class: "sortable col-last", onclick: () => setSort("last") }, el("span", { text: "最近检查" }), arrow("last")),
       el("th", { class: "col-actions-header", text: "操作" }),
     ),
   );
@@ -344,8 +344,8 @@ function dataRow(r, key) {
   } else {
     cronTd.appendChild(
       el("span", { class: "cron-cell", title: r.cron_expr },
-        el("span", { class: "cron-label", text: `${cronLabel(r.cron_expr)} ` }),
-        r.cron_expr,
+        el("span", { class: "cron-label", text: cronLabel(r.cron_expr) }),
+        el("span", { class: "cron-expr", text: r.cron_expr }),
       ),
     );
   }
@@ -356,7 +356,7 @@ function dataRow(r, key) {
   if (next && next - Date.now() / 1000 < 3600) nextTd.classList.add("soon");
   tr.appendChild(nextTd);
 
-  tr.appendChild(el("td", { class: "col-time", text: relTime(r.last_update), title: r.last_update ? new Date(r.last_update * 1000).toLocaleString() : "" }));
+  tr.appendChild(el("td", { class: "col-time col-last", text: relTime(r.last_update), title: r.last_update ? new Date(r.last_update * 1000).toLocaleString() : "" }));
 
   const actions = el("td", { class: "col-actions" });
   const pushing = state.pushingKey === key;

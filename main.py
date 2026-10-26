@@ -36,11 +36,19 @@ def _schema_default_prompt() -> str:
         return ""
 
 
+# The default prompt persisted by versions <= 1.2.0. Users who never
+# customized it still carry this exact string, so upgrade it in place.
+_LEGACY_DEFAULT_PROMPT = (
+    "你是我的 RSS 阅读助理。把下面的订阅条目整理成一份简洁的中文简报：先一句话总结本期整体亮点，"
+    "再逐条给出「一句话概括 + 为什么值得看」，保留每条的原文链接。全文控制在一屏以内，不要寒暄，不要多余标题。"
+)
+
+
 @register(
     "astrbot_plugin_rss",
     "Soulter",
     "RSS订阅插件",
-    "1.2.0",
+    "1.3.0",
     "https://github.com/irorange27/astrbot_plugin_rss",
 )
 class RssPlugin(Star):
@@ -67,6 +75,12 @@ class RssPlugin(Star):
         self.ai_summary_prompt = config.get("ai_summary_prompt") or _schema_default_prompt()
         if not config.get("ai_summary_prompt"):
             config["ai_summary_prompt"] = self.ai_summary_prompt
+        # One-time migration: v1.2.0 auto-persisted its default prompt into the
+        # config, so untouched installs would keep the outdated prompt forever
+        if self.ai_summary_prompt == _LEGACY_DEFAULT_PROMPT:
+            self.ai_summary_prompt = _schema_default_prompt()
+            config["ai_summary_prompt"] = self.ai_summary_prompt
+            config.save_config()
 
         self.pic_handler = RssImageHandler(self.is_adjust_pic)
         self.scheduler = AsyncIOScheduler()
@@ -199,6 +213,50 @@ class RssPlugin(Star):
             self.logger.warning(f"rss: 内容安全检查失败，默认放行: {e}")
             return False
 
+    # Char budgets for the AI digest input. The total is pre-split across
+    # items so a big poll never drops entries and never explodes the prompt.
+    AI_DIGEST_PER_ITEM_CHARS = 1500
+    AI_DIGEST_TOTAL_CHARS = 9000
+
+    def _build_digest_input(self, rss_items: List[RSSItem]) -> str:
+        """Build the user prompt for the AI digest from polled items.
+
+        Numbered blocks with per-item dates give the model stable references;
+        a missing description is marked explicitly so the model does not
+        invent content for entries it cannot see.
+        """
+        per_item = max(
+            300,
+            min(
+                self.AI_DIGEST_PER_ITEM_CHARS,
+                (self.AI_DIGEST_TOTAL_CHARS - 80 * len(rss_items))
+                // max(1, len(rss_items)),
+            ),
+        )
+        blocks = []
+        for i, it in enumerate(rss_items, 1):
+            desc = it.description
+            if len(desc) > per_item:
+                desc = desc[:per_item] + "……"
+            parts = [f"[{i}] {it.title or '(无标题)'}"]
+            if it.pubDate_timestamp:
+                parts.append(
+                    "发布时间: "
+                    + datetime.fromtimestamp(it.pubDate_timestamp).strftime(
+                        "%m-%d %H:%M"
+                    )
+                )
+            parts.append(f"正文: {desc or '(源里没有摘要)'}")
+            parts.append(f"链接: {it.link}")
+            blocks.append("\n".join(parts))
+        return (
+            self.ai_summary_prompt
+            + "\n\n来源频道: "
+            + (rss_items[0].chan_title or "")
+            + "\n\n"
+            + "\n\n".join(blocks)
+        )
+
     async def _ai_digest(self, rss_items: List[RSSItem]) -> str | None:
         """Use the current LLM provider to compress new items into one digest.
 
@@ -207,17 +265,7 @@ class RssPlugin(Star):
         provider = self.context.get_using_provider()
         if provider is None:
             raise RuntimeError("no available LLM provider")
-        lines = []
-        for it in rss_items:
-            desc = self.data_handler.strip_html(it.description or "")[:400]
-            lines.append(f"标题: {it.title}\n内容: {desc}\n链接: {it.link}")
-        prompt = (
-            self.ai_summary_prompt
-            + "\n\n来源频道: "
-            + (rss_items[0].chan_title or "")
-            + "\n\n"
-            + "\n\n".join(lines)
-        )
+        prompt = self._build_digest_input(rss_items)
         resp = await provider.text_chat(
             prompt=prompt,
             session_id="rss_digest",
@@ -342,7 +390,9 @@ class RssPlugin(Star):
         if text is None:
             self.logger.error(f"rss: 无法解析站点 {url} 的RSS信息")
             return []
-        root = etree.fromstring(text)
+        # recover=True: some feeds contain undefined HTML entities (e.g. &bull;)
+        # that would otherwise crash the whole cron job on every tick
+        root = etree.fromstring(text, etree.XMLParser(recover=True))
         items = root.xpath("//item")
         if not items:
             # Atom 格式：使用 <entry> 节点
@@ -363,9 +413,7 @@ class RssPlugin(Star):
                 title_els = item.xpath("title") or item.xpath(
                     "*[local-name()='title']"
                 )
-                title = (title_els[0].text or "") if title_els else ""
-                if len(title) > self.title_max_length:
-                    title = title[: self.title_max_length] + "..."
+                title = (title_els[0].text or "").strip() if title_els else ""
 
                 link_els = item.xpath("link")
                 if link_els and link_els[0].text:
@@ -383,15 +431,22 @@ class RssPlugin(Star):
                     or item.xpath("*[local-name()='summary']")
                     or item.xpath("*[local-name()='content']")
                 )
-                description = "".join(desc_els[0].itertext()) if desc_els else ""
+                raw_desc = "".join(desc_els[0].itertext()) if desc_els else ""
+                description = self.data_handler.strip_html(raw_desc)
+                # Many RSS 2.0 feeds keep the full article in content:encoded and
+                # only a teaser in description; the AI digest needs the real body,
+                # so fall back when the description is too thin to summarize
+                if len(description) < 100:
+                    enc_els = item.xpath("*[local-name()='encoded']")
+                    if enc_els:
+                        full = self.data_handler.strip_html(
+                            "".join(enc_els[0].itertext())
+                        )
+                        if len(full) > len(description):
+                            raw_desc = "".join(enc_els[0].itertext())
+                            description = full
 
-                pic_url_list = self.data_handler.strip_html_pic(description)
-                description = self.data_handler.strip_html(description)
-
-                if len(description) > self.description_max_length:
-                    description = (
-                        description[: self.description_max_length] + "..."
-                    )
+                pic_url_list = self.data_handler.strip_html_pic(raw_desc)
 
                 pub_date = None
                 pub_date_timestamp = 0
@@ -515,10 +570,18 @@ class RssPlugin(Star):
     async def _get_chain_components(self, item: RSSItem):
         """组装消息链"""
         comps = []
-        comps.append(Comp.Plain(f"频道 {item.chan_title} 最新 Feed\n---\n标题: {item.title}\n---\n"))
+        # RSSItem carries the untruncated text from the feed; apply display
+        # limits here so both AI and raw push paths share one source
+        title = item.title
+        if len(title) > self.title_max_length:
+            title = title[: self.title_max_length] + "..."
+        description = item.description
+        if len(description) > self.description_max_length:
+            description = description[: self.description_max_length] + "..."
+        comps.append(Comp.Plain(f"频道 {item.chan_title} 最新 Feed\n---\n标题: {title}\n---\n"))
         if not self.is_hide_url:
             comps.append(Comp.Plain(f"链接: {item.link}\n---\n"))
-        comps.append(Comp.Plain(item.description+"\n---\n"))
+        comps.append(Comp.Plain(description+"\n---\n"))
         if self.is_read_pic and item.pic_urls:
             # 如果max_pic_item为-1则不限制图片数量
             temp_max_pic_item = len(item.pic_urls) if self.max_pic_item == -1 else self.max_pic_item
