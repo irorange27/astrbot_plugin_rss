@@ -374,28 +374,19 @@ tr.preview-row > td { padding: 0 12px; border-bottom: 1px solid var(--border-wea
   color: var(--faint); padding: 6px 0 0;
 }
 
-/* ---- density pass: compact table ---- */
-.sheet.compact thead th { padding: 6px 10px; font-size: 0.6875rem; }
-.sheet.compact tbody td { padding: 4px 10px; }
-.sheet.compact .feed-icon { width: 20px; height: 20px; border-radius: 5px; }
-.sheet.compact .feed-icon svg { width: 12px; height: 12px; }
-.sheet.compact .feed-name { font-size: 0.8125rem; }
-.sheet.compact .feed-host { font-size: 0.6875rem; }
-.sheet.compact .col-session .session-label { font-size: 0.75rem; }
-.sheet.compact .col-session .session-raw { font-size: 0.625rem; max-width: 130px; }
-.sheet.compact .cron-cell { font-size: 0.6875rem; }
-.sheet.compact .col-time { font-size: 0.6875rem; }
-.sheet.compact .btn.small { height: 24px; padding: 0 4px; }
-.sheet.compact .btn.small svg { width: 14px; height: 14px; }
-.sheet.compact .col-check input { width: 13px; height: 13px; }
 
-/* density toggle in toolbar */
-.density-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 0.75rem; color: var(--muted); cursor: pointer;
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 3px 8px; background: transparent;
-  transition: color 150ms ease-out, border-color 150ms ease-out;
-}
-.density-toggle:hover { color: var(--text); border-color: var(--primary); }
-.density-toggle.on { color: var(--tonal-ink); border-color: var(--primary); background: var(--tonal-bg); }
+
+/* ---- compact table (single density) ---- */
+thead th { padding: 6px 10px; font-size: 0.6875rem; }
+tbody td { padding: 4px 10px; }
+.feed-icon { width: 20px; height: 20px; border-radius: 5px; }
+.feed-icon svg { width: 12px; height: 12px; }
+.feed-name { font-size: 0.8125rem; }
+.feed-host { font-size: 0.6875rem; }
+.col-session .session-label { font-size: 0.75rem; }
+.col-session .session-raw { font-size: 0.625rem; max-width: 130px; }
+.cron-cell { font-size: 0.6875rem; }
+.col-time { font-size: 0.6875rem; }
+.btn.small { height: 24px; padding: 0 4px; }
+.btn.small svg { width: 14px; height: 14px; }
+.col-check input { width: 13px; height: 13px; }

@@ -806,16 +806,6 @@ document.getElementById("searchInput").addEventListener("input", (ev) => {
   state.filter = ev.target.value;
   renderTable();
 });
-document.getElementById("densityBtn").addEventListener("click", (ev) => {
-  const sheet = document.querySelector("#panel-subs .sheet");
-  const on = sheet.classList.toggle("compact");
-  ev.currentTarget.classList.toggle("on", on);
-  localStorage.setItem("rss-density", on ? "compact" : "cozy");
-});
-if (localStorage.getItem("rss-density") === "compact") {
-  document.querySelector("#panel-subs .sheet").classList.add("compact");
-  document.getElementById("densityBtn").classList.add("on");
-}
 document.getElementById("sessionFilter").addEventListener("change", (ev) => {
   state.sessionFilter = ev.target.value;
   renderTable();
