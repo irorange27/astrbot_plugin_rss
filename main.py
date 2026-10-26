@@ -98,8 +98,77 @@ class RssPlugin(Star):
             self.logger.error(f"rss: 请求站点 {url} 发生未知错误: {str(e)}")
             return None
 
-    async def _ai_digest(self, rss_items: List[RSSItem]) -> str:
-        """Use the current LLM provider to compress new items into one digest."""
+    def _build_system_prompt(self) -> str:
+        """Compose the system prompt under the same rules as normal chats:
+        persona first, then the optional datetime reminder."""
+        try:
+            cfg = self.context.get_config()
+        except Exception:
+            return ""
+        parts = []
+        pid = None
+        try:
+            pid = (
+                cfg.get("agent_runner", {})
+                .get("config", {})
+                .get("persona", {})
+                .get("persona_id")
+            ) or cfg.get("provider_settings", {}).get("default_personality")
+        except Exception:
+            pid = None
+        if pid:
+            try:
+                persona = self.context.persona_manager.get_persona_v3_by_id(pid)
+                prompt = getattr(persona, "system_prompt", "") if persona else ""
+                if prompt:
+                    parts.append(prompt)
+            except Exception:
+                pass
+        try:
+            if cfg.get("provider_settings", {}).get("datetime_system_prompt"):
+                now = None
+                tz = cfg.get("timezone")
+                if tz:
+                    try:
+                        import zoneinfo
+
+                        now = datetime.now(zoneinfo.ZoneInfo(tz))
+                    except Exception:
+                        now = None
+                if now is None:
+                    now = datetime.now().astimezone()
+                parts.append(
+                    f"Current datetime: {now.strftime('%Y-%m-%d %H:%M (%Z)')}, "
+                    f"Weekday: {now.strftime('%A')}"
+                )
+        except Exception:
+            pass
+        return "\n".join(parts)
+
+    def _safety_blocked(self, text: str) -> bool:
+        """Apply AstrBot's content safety rules to outgoing digests."""
+        try:
+            cfg = self.context.get_config()
+            cs = cfg.get("content_safety", {})
+            if not cs.get("also_use_in_response"):
+                return False
+            from astrbot.core.pipeline.content_safety_check.strategies.strategy import (
+                StrategySelector,
+            )
+
+            ok, info = StrategySelector(cs).check(text)
+            if not ok:
+                self.logger.warning(f"rss: AI 摘要被内容安全策略拦截: {info}")
+            return not ok
+        except Exception as e:
+            self.logger.warning(f"rss: 内容安全检查失败，默认放行: {e}")
+            return False
+
+    async def _ai_digest(self, rss_items: List[RSSItem]) -> str | None:
+        """Use the current LLM provider to compress new items into one digest.
+
+        Follows AstrBot's rules: persona + datetime as system prompt, and the
+        content safety check on the response. Returns None when blocked."""
         provider = self.context.get_using_provider()
         if provider is None:
             raise RuntimeError("no available LLM provider")
@@ -115,9 +184,15 @@ class RssPlugin(Star):
             + "\n\n".join(lines)
         )
         resp = await provider.text_chat(
-            prompt=prompt, session_id="rss_digest", persist=False
+            prompt=prompt,
+            session_id="rss_digest",
+            system_prompt=self._build_system_prompt() or None,
+            persist=False,
         )
-        return (resp.completion_text or "").strip()
+        digest = (resp.completion_text or "").strip()
+        if self._safety_blocked(digest):
+            return None
+        return digest
 
     async def cron_task_callback(self, url: str, user: str):
         """定时任务回调"""
@@ -144,6 +219,16 @@ class RssPlugin(Star):
         if rss_items and self.ai_summary:
             try:
                 digest = await self._ai_digest(rss_items)
+                if digest is None:
+                    # Blocked by content safety: skip sending, advance watermark.
+                    self.data_handler.data[url]["subscribers"][user]["last_update"] = max(
+                        max_ts, max(i.pubDate_timestamp for i in rss_items)
+                    )
+                    self.data_handler.data[url]["subscribers"][user]["latest_link"] = (
+                        rss_items[0].link
+                    )
+                    self.data_handler.save_data()
+                    return
                 msc = MessageChain(chain=[Comp.Plain(digest)], use_t2i_=self.t2i)
                 await self.context.send_message(user, msc)
                 self.data_handler.data[url]["subscribers"][user]["last_update"] = max(
@@ -588,13 +673,30 @@ class RssPlugin(Star):
     async def list_command(self, event: AstrMessageEvent):
         """列出当前所有订阅的RSS频道"""
         user = event.unified_msg_origin
-        ret = "当前订阅的频道：\n"
         subs_urls = self.data_handler.get_subs_channel_url(user)
+        ret = f"当前订阅的频道（{len(subs_urls)} 个）：\n"
         cnt = 0
         for url in subs_urls:
             info = self.data_handler.data[url]["info"]
             ret += f"{cnt}. {info['title']} - {info['description']}\n"
             cnt += 1
+        yield event.plain_result(ret)
+
+    @rss.command("count")
+    async def count_command(self, event: AstrMessageEvent):
+        """查看全部订阅统计（跨会话）"""
+        feeds = 0
+        subs = 0
+        sessions = {}
+        for url, info in self.data_handler.data.items():
+            if url == "rsshub_endpoints" or url == "settings":
+                continue
+            feeds += 1
+            for user in info["subscribers"]:
+                subs += 1
+                sessions[user] = sessions.get(user, 0) + 1
+        ret = f"全部订阅源: {feeds} 个，订阅关系: {subs} 条\n"
+        ret += "\n".join(f"{s}: {c} 个源" for s, c in sessions.items())
         yield event.plain_result(ret)
 
     @rss.command("remove")
